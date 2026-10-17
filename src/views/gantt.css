@@ -23,6 +23,8 @@
 .hseg.strong { font-weight: 700; color: var(--accent); letter-spacing: .03em; }
 .hseg.week { font-family: var(--f-mono); font-size: 10px; color: var(--muted); }
 .rmark { position: absolute; top: 2px; transform: translateX(-100%); }
+.rmark.bare span { display: none; }
+.rmark.bare::after { content: ""; display: block; width: 7px; height: 7px; margin: 5px 0 0 -3px; transform: translateX(100%) rotate(45deg); background: var(--accent); }
 .rmark span { display: inline-block; font-size: 10.5px; font-weight: 700; padding: 1px 6px; border-radius: 5px; background: var(--accent-soft); color: var(--accent); white-space: nowrap; max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
 
 .glane { background: var(--surface-2); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }

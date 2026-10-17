@@ -49,9 +49,19 @@ export function Gantt({ project, mapping, draft, setDraft, resetDraft, changed, 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleBars.map(b => b.start + b.end).join(), releases.length]);
   const ax = useMemo(() => axis(win.start, win.end, prefs.fyStartMonth), [win, prefs.fyStartMonth]);
+  // Release labels sit to the left of their line; skip a label when the previous one would overlap it.
+  const labelled = useMemo(() => {
+    const out = new Set<string>(); let lastX = -Infinity;
+    for (const r of releases) { const x = xOf(win.start, r.due!, dayPx); if (x - lastX >= 118) { out.add(r.id); lastX = x; } }
+    return out;
+  }, [releases, win.start, dayPx]);
   const conflictKeys = new Set(conflicts.map(c => c.key));
   const parkedItems = draft.parked.map(k => schedule.byKey.get(k)).filter((i): i is Item => !!i);
   const undated = groups.flatMap(g => g.undated);
+  const epicCount = groups.reduce((n, g) => n + g.rows.filter(r => r.depth === 0).length, 0);
+  const undatedCount = undated.length;
+  const mostlyUndated = epicCount > 0 && undatedCount / epicCount >= 0.4;
+  const dateFieldNames = [mapping.startField, mapping.endField].filter(Boolean).join(" and ");
   const todayX = xOf(win.start, today(), dayPx);
   const hasKids = (i: Item) => (schedule.children.get(i.key)?.length ?? 0) > 0;
 
@@ -129,6 +139,14 @@ export function Gantt({ project, mapping, draft, setDraft, resetDraft, changed, 
         </div>
       )}
 
+      {mostlyUndated && (
+        <div className="callout info">
+          <b>{undatedCount} of {epicCount} epics have no dates</b>, so they're listed under the chart instead of on it.
+          Set {dateFieldNames ? <>the <b>{dateFieldNames}</b> fields</> : "start and end dates"} on GitHub, give their sub-issues dates,
+          or use <b>Place</b> to try a window in your draft.
+        </div>
+      )}
+
       {groups.length === 0 ? (
         <div className="card pad"><p>No epics found. Check <a href="#settings" onClick={e => { e.preventDefault(); location.hash = location.hash.replace(/\/[a-z]+$/, "/settings"); }}>how epics are detected</a>.</p></div>
       ) : (
@@ -149,21 +167,22 @@ export function Gantt({ project, mapping, draft, setDraft, resetDraft, changed, 
                   <div className="hrow">{ax.quarters.map(s => <div key={s.start} className="hseg strong" style={{ left: xOf(win.start, s.start, dayPx), width: s.days * dayPx }}>{s.label}</div>)}</div>
                   <div className="hrow">{ax.months.map(s => <div key={s.start} className="hseg" style={{ left: xOf(win.start, s.start, dayPx), width: s.days * dayPx }}>{s.days * dayPx > 46 ? s.label : s.label.slice(0, 3)}</div>)}</div>
                   <div className="hrow">{releases.map(r => (
-                    <div key={r.id} className="rmark" style={{ left: xOf(win.start, r.due!, dayPx) + dayPx }} title={`${r.title} due ${short(r.due!)} · ${r.done}/${r.items.length} done`}>
-                      <span>{r.title}</span>
+                    <div key={r.id} className={`rmark ${labelled.has(r.id) ? "" : "bare"}`} style={{ left: xOf(win.start, r.due!, dayPx) + dayPx }} title={`${r.title} due ${short(r.due!)} · ${r.done}/${r.items.length} done`}>
+                      <span>{labelled.has(r.id) ? r.title : ""}</span>
                     </div>
                   ))}</div>
                   {zoom !== "quarter" && <div className="hrow">{ax.weeks.map(s => <div key={s.start} className="hseg week" style={{ left: xOf(win.start, s.start, dayPx), width: s.days * dayPx }}>{zoom === "week" || s.days * dayPx > 30 ? s.label : ""}</div>)}</div>}
                 </div>
               </div>
 
-              {groups.map((g, gi) => (
+              {groups.map((g, gi) => ({ g, gi, shown: g.rows.filter(r => r.depth > 0 || r.bar) })).filter(x => x.shown.length > 0).map(({ g, gi, shown }) => (
                 <div key={g.lane}>
                   <div className="grow glane">
-                    <div className="gl"><span className="dot" style={{ background: LANE_COLORS[gi % LANE_COLORS.length] }} /><b>{g.lane}</b><span className="muted num">{g.rows.filter(r => r.depth === 0).length}</span></div>
+                    <div className="gl"><span className="dot" style={{ background: LANE_COLORS[gi % LANE_COLORS.length] }} /><b>{g.lane}</b>
+                      <span className="muted num">{shown.filter(r => r.depth === 0).length}{g.undated.length > 0 && ` + ${g.undated.length} undated`}</span></div>
                     <div className="gt" style={{ width }} />
                   </div>
-                  {g.rows.map(r => {
+                  {shown.map(r => {
                     const prio = priorityOf(r.item, mapping);
                     const color = prio ? `var(--p-${Math.min(prio.rank, 3)})` : LANE_COLORS[gi % LANE_COLORS.length];
                     const pct = r.item.subIssues ? (100 * r.item.subIssues.completed) / r.item.subIssues.total : r.item.state === "open" ? 0 : 100;
