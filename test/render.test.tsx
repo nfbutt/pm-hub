@@ -11,6 +11,9 @@ import { Gantt } from "../src/views/Gantt";
 import { Overview } from "../src/views/Overview";
 import { Releases } from "../src/views/Releases";
 import { Settings } from "../src/views/Settings";
+import { Progress } from "../src/views/Progress";
+import { Schedule } from "../src/views/Schedule";
+import { Workload } from "../src/views/Workload";
 
 const project = demoProject();
 const mapping = detectMapping(project);
@@ -44,6 +47,24 @@ describe("views render with the demo project", () => {
   it("Releases", () => {
     const html = renderToString(<Releases project={project} mapping={mapping} draft={emptyDraft()} />);
     expect(html).toContain("Release 2");
+  });
+
+  it("Progress", () => {
+    const html = renderToString(<Progress project={project} mapping={mapping} draft={emptyDraft()} />);
+    expect(html).toContain("Epic progress");
+    expect(html).toContain("Usage-based pricing engine");
+  });
+
+  it("Status & workload", () => {
+    const html = renderToString(<Workload project={project} mapping={mapping} draft={emptyDraft()} />);
+    expect(html).toContain("Open items by status");
+    expect(html).toContain("Unassigned");
+  });
+
+  it("Schedule", () => {
+    const html = renderToString(<Schedule project={project} mapping={mapping} draft={emptyDraft()} />);
+    expect(html).toContain("This month");
+    expect(html).toContain("cal-day");
   });
 
   it("Settings", () => {
