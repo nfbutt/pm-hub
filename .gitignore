@@ -1,0 +1,8 @@
+node_modules
+dist
+*.local
+.env*
+coverage
+.DS_Store
+# Never commit real project snapshots; tests use the synthetic fixture only.
+snapshots/
