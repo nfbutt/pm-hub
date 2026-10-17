@@ -14,6 +14,8 @@ export interface ProjectState {
   loading: boolean;
   progress: { loaded: number; total: number } | null;
   error: string | null;
+  /** The GitHubError kind, e.g. "auth" when the token was rejected, so the screen can offer a fix. */
+  errorKind: string | null;
   refresh: () => void;
   setMapping: (m: Mapping) => void;
   resetMapping: () => void;
@@ -33,8 +35,11 @@ export function useProject(source: Source): ProjectState {
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState<{ loaded: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [errorKind, setErrorKind] = useState<string | null>(null);
+  // Set on every mount: StrictMode mounts twice in development, and a ref left false
+  // by the first cleanup would silently drop every result.
   const live = useRef(true);
-  useEffect(() => () => { live.current = false; }, []);
+  useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
 
   const owner = source.kind === "github" ? source.owner : DEMO_OWNER;
   const number = source.kind === "github" ? source.number : 1;
@@ -47,14 +52,17 @@ export function useProject(source: Source): ProjectState {
 
   const fetchFresh = useCallback(async () => {
     if (source.kind !== "github") return;
-    setLoading(true); setError(null); setProgress(null);
+    setLoading(true); setError(null); setErrorKind(null); setProgress(null);
     try {
       const p = await loadProject(source.client, source.owner, source.number, (loaded, total) => live.current && setProgress({ loaded, total }));
       if (!live.current) return;
       await applyProject(p);
       await writeCachedProject(p);
     } catch (e) {
-      if (live.current) setError(e instanceof GitHubError ? e.message : "Loading the project failed.");
+      if (live.current) {
+        setError(e instanceof GitHubError ? e.message : "Loading the project failed.");
+        setErrorKind(e instanceof GitHubError ? e.kind : null);
+      }
     } finally {
       if (live.current) { setLoading(false); setProgress(null); }
     }
@@ -76,5 +84,5 @@ export function useProject(source: Source): ProjectState {
   };
   const resetMapping = () => { if (project) setMapping(detectMapping(project)); };
 
-  return { project, mapping, loading, progress, error, refresh: () => void fetchFresh(), setMapping, resetMapping };
+  return { project, mapping, loading, progress, error, errorKind, refresh: () => void fetchFresh(), setMapping, resetMapping };
 }

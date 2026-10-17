@@ -33,7 +33,8 @@ const TABS: { id: ViewId; label: string }[] = [
 
 export function ProjectScreen({ source, view, onSignOut }: { source: Source; view: ViewId; onSignOut?: () => void }) {
   const state = useProject(source);
-  const { project, mapping, loading, progress, error } = state;
+  const { project, mapping, loading, progress, error, errorKind } = state;
+  const rate = source.kind === "github" ? source.client.state.rateLimit : null;
   const owner = source.kind === "github" ? source.owner : DEMO_OWNER;
   const number = source.kind === "github" ? source.number : 1;
   const { draft, setDraft, resetDraft, changed } = useDraft(owner, number);
@@ -55,6 +56,9 @@ export function ProjectScreen({ source, view, onSignOut }: { source: Source; vie
     <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
       {source.kind === "github" && (
         <>
+          {rate && rate.remaining < 500 && (
+            <span className="pill warn" title={`Resets at ${new Date(rate.resetAt).toLocaleTimeString()}`}>{rate.remaining} API points left this hour</span>
+          )}
           {project && <span className="muted" style={{ fontSize: 12 }}>Loaded {new Date(project.loadedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span>}
           <button className="btn" onClick={state.refresh} disabled={loading}>
             {loading ? (progress ? `Loading ${progress.loaded}/${progress.total}…` : "Loading…") : "Refresh"}
@@ -77,7 +81,13 @@ export function ProjectScreen({ source, view, onSignOut }: { source: Source; vie
     <>
       <TopBar crumb={crumb} tabs={tabs} right={right} />
       <main className="page">
-        {error && <div className="callout bad" role="alert">{error} {project && "Showing the last loaded copy."}</div>}
+        {error && (
+          <div className="callout bad" role="alert" style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <span>{error} {project && "Showing the last loaded copy."}</span>
+            {errorKind === "auth" && onSignOut && <button className="btn" onClick={onSignOut}>Connect a new token</button>}
+            {errorKind === "not-found" && <a className="btn" href="#/">Choose another project</a>}
+          </div>
+        )}
         {!project && !error && <p className="muted">{progress ? `Loading items ${progress.loaded} of ${progress.total}…` : "Loading the project…"}</p>}
         {project && mapping && (
           <>
