@@ -10,7 +10,7 @@ export function TopBar({ crumb, tabs, right }: { crumb?: ReactNode; tabs?: React
         </a>
         {crumb && <div className="crumb">{crumb}</div>}
         <div className="spacer" />
-        {right}
+        {right && <div className="topbar-right">{right}</div>}
       </div>
       {tabs && <div className="topbar-in" style={{ paddingTop: 0 }}>{tabs}</div>}
     </header>

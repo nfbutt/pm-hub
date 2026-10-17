@@ -3,6 +3,7 @@
 import { del, get, set } from "idb-keyval";
 import type { Project } from "../model/normalize";
 import type { Mapping } from "../model/mapping";
+import type { Draft } from "../model/schedule";
 
 const projectKey = (owner: string, number: number) => `project:${owner}/${number}`;
 const mappingKey = (owner: string, number: number) => `mapping:${owner}/${number}`;
@@ -19,6 +20,26 @@ export async function readMapping(owner: string, number: number): Promise<Mappin
 export async function writeMapping(owner: string, number: number, m: Mapping) {
   try { await set(mappingKey(owner, number), m); } catch { /* optional */ }
 }
+const draftKey = (owner: string, number: number) => `draft:${owner}/${number}`;
+
+export async function readDraft(owner: string, number: number): Promise<Draft | null> {
+  try { return (await get<Draft>(draftKey(owner, number))) ?? null; } catch { return null; }
+}
+export async function writeDraft(owner: string, number: number, d: Draft) {
+  try { await set(draftKey(owner, number), d); } catch { /* optional */ }
+}
+
 export async function forgetProject(owner: string, number: number) {
-  try { await Promise.all([del(projectKey(owner, number)), del(mappingKey(owner, number))]); } catch { /* optional */ }
+  try { await Promise.all([del(projectKey(owner, number)), del(mappingKey(owner, number)), del(draftKey(owner, number))]); } catch { /* optional */ }
+}
+
+// Small per-browser view preferences.
+export interface Prefs { zoom: "week" | "month" | "quarter"; fyStartMonth: number; includeClosed: boolean }
+const PREFS = "pm-hub:prefs";
+export const defaultPrefs: Prefs = { zoom: "month", fyStartMonth: 1, includeClosed: false };
+export function readPrefs(): Prefs {
+  try { return { ...defaultPrefs, ...JSON.parse(localStorage.getItem(PREFS) ?? "{}") }; } catch { return defaultPrefs; }
+}
+export function writePrefs(p: Prefs) {
+  try { localStorage.setItem(PREFS, JSON.stringify(p)); } catch { /* optional */ }
 }
