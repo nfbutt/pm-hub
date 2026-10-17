@@ -19,7 +19,7 @@ Pick one of your GitHub Projects. pm-hub reads its items, field values, mileston
 | Status & workload | Status counts, open work per person, items missing dates or owners | ✅ |
 | Burn-up | Scope and completed work per week, throughput, projected finish | ✅ |
 | Release confidence | Monte Carlo forecast: chance of hitting each due date, P50/P85 dates | ✅ |
-| Dependencies | Graph of blocked-by and parent links, critical path, cycles | Phase 5 |
+| Dependencies | Graph of blocked-by and parent links, critical path, cycles | ✅ |
 
 ### Works with any project
 

@@ -11,6 +11,7 @@ import { Gantt } from "../src/views/Gantt";
 import { Overview } from "../src/views/Overview";
 import { Releases } from "../src/views/Releases";
 import { Settings } from "../src/views/Settings";
+import { Dependencies, layoutGraph } from "../src/views/Dependencies";
 import { BurnUp } from "../src/views/BurnUp";
 import { Confidence } from "../src/views/Confidence";
 import { Progress } from "../src/views/Progress";
@@ -85,5 +86,17 @@ describe("forecast views render with the demo project", () => {
     const html = renderToString(<Confidence project={project} mapping={mapping} />);
     expect(html).toContain("Release confidence");
     expect(html).toMatch(/chance of finishing by the due date|Done/);
+  });
+});
+
+describe("dependency view", () => {
+  it("lays out and renders the graph with the critical path", () => {
+    const html = renderToString(<Dependencies project={project} mapping={mapping} draft={emptyDraft()} />);
+    expect(html).toContain("<svg class=\"deps\"");
+    expect(html).toContain("node cp");
+  });
+  it("lays every node inside the drawing", () => {
+    const laid = layoutGraph({ nodes: project.items.filter(i => i.blockedBy.length || project.items.some(j => j.blockedBy.some(b => b.key === i.key))), edges: [] });
+    for (const n of laid.nodes) { expect(n.x).toBeGreaterThan(0); expect(n.x).toBeLessThan(laid.width); }
   });
 });

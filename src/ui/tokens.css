@@ -236,3 +236,23 @@ table.t tr:last-child td { border-bottom: 0; }
 .conf-dates { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .conf-dates > span { display: grid; gap: 2px; font-size: 12px; }
 .conf-dates b { font-size: 14px; }
+
+/* dependencies */
+.deps-wrap { overflow: auto; padding: 8px; }
+.deps { display: block; }
+.deps .edge { fill: none; stroke: var(--muted); stroke-width: 1.4; opacity: .7; }
+.deps .edge.parent { stroke-dasharray: 2 4; opacity: .5; }
+.deps .edge.cp { stroke: var(--accent); stroke-width: 3; opacity: 1; }
+.deps .edge.loop { stroke: var(--bad); stroke-width: 2.2; opacity: 1; }
+.deps .arrowhead { fill: var(--muted); }
+.deps .arrowhead.cp { fill: var(--accent); }
+.deps .node { cursor: pointer; }
+.deps .node rect { fill: var(--surface); stroke: var(--line); stroke-width: 1.2; }
+.deps .node:hover rect, .deps .node:focus rect { stroke: var(--accent); }
+.deps .node:focus { outline: none; }
+.deps .node.cp rect { stroke: var(--accent); stroke-width: 2.4; fill: var(--accent-soft); }
+.deps .node.loop rect { stroke: var(--bad); stroke-width: 2.4; }
+.deps .node.closed rect { fill: var(--surface-2); }
+.deps .node.closed .ntitle { fill: var(--muted); }
+.deps .ntitle { font-size: 12.5px; font-weight: 700; fill: var(--fg); font-family: var(--f-body); }
+.deps .nmeta { font-size: 10.5px; fill: var(--muted); font-family: var(--f-mono); }
