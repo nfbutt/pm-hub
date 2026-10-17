@@ -6,6 +6,9 @@ import { UserMenu } from "../ui/UserMenu";
 import { DEMO_OWNER } from "../demo/fixture";
 import { Gantt } from "./Gantt";
 import { Overview } from "./Overview";
+import { Progress } from "./Progress";
+import { Schedule } from "./Schedule";
+import { Workload } from "./Workload";
 import { Releases } from "./Releases";
 import { Settings } from "./Settings";
 import { useDraft } from "./useDraft";
@@ -16,6 +19,9 @@ const TABS: { id: ViewId; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "gantt", label: "Gantt" },
   { id: "releases", label: "Releases" },
+  { id: "schedule", label: "Schedule" },
+  { id: "progress", label: "Progress" },
+  { id: "workload", label: "Status & workload" },
   { id: "settings", label: "Settings" },
 ];
 
@@ -72,6 +78,9 @@ export function ProjectScreen({ source, view, onSignOut }: { source: Source; vie
             {active === "overview" && <Overview project={project} mapping={mapping} />}
             {active === "gantt" && <Gantt project={project} mapping={mapping} draft={draft} setDraft={setDraft} resetDraft={resetDraft} changed={changed} prefs={prefs} setPrefs={setPrefs} />}
             {active === "releases" && <Releases project={project} mapping={mapping} draft={draft} />}
+            {active === "schedule" && <Schedule project={project} mapping={mapping} draft={draft} />}
+            {active === "progress" && <Progress project={project} mapping={mapping} draft={draft} />}
+            {active === "workload" && <Workload project={project} mapping={mapping} draft={draft} />}
             {active === "settings" && <Settings project={project} mapping={mapping} setMapping={state.setMapping} resetMapping={state.resetMapping} prefs={prefs} setPrefs={setPrefs} />}
           </>
         )}

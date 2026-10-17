@@ -14,9 +14,9 @@ Pick one of your GitHub Projects. pm-hub reads its items, field values, mileston
 | Settings | Change how dates, epics, swimlanes, releases and priority are read; fiscal-year quarters | ✅ |
 | Gantt | Epics as bars in swimlanes, release markers, a draft you can drag, conflict flags, CSV export | ✅ |
 | Releases | One column per milestone/iteration with what ships and how much is done | ✅ |
-| Schedule | Calendar of due dates, iteration boundaries and item starts/ends | Phase 3 |
-| Progress | Each epic's done share against how much of its time has passed | Phase 3 |
-| Status & workload | Status counts, open work per person, items missing dates or owners | Phase 3 |
+| Schedule | Calendar of due dates, iteration boundaries and item starts/ends | ✅ |
+| Progress | Each epic's done share against how much of its time has passed | ✅ |
+| Status & workload | Status counts, open work per person, items missing dates or owners | ✅ |
 | Burn-up | Scope and completed work per week, throughput, projected finish | Phase 4 |
 | Release confidence | Monte Carlo forecast: chance of hitting each due date, P50/P85 dates | Phase 4 |
 | Dependencies | Graph of blocked-by and parent links, critical path, cycles | Phase 5 |
