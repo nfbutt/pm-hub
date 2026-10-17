@@ -212,3 +212,27 @@ table.t tr:last-child td { border-bottom: 0; }
 .seg button { border: 0; background: transparent; padding: 5px 11px; border-radius: 7px; font-weight: 600; font-size: 13px; color: var(--muted); }
 .seg button.on { background: var(--surface); color: var(--fg); box-shadow: var(--shadow); }
 .check { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; }
+
+/* charts */
+.chartbox { width: 100%; min-width: 0; }
+.chart { display: block; overflow: visible; max-width: 100%; }
+.chart .grid { stroke: var(--line-soft); stroke-width: 1; }
+.chart .tick { font-size: 11px; fill: var(--muted); font-family: var(--f-mono); }
+.chart .tick.strong { fill: var(--fg); font-weight: 600; }
+.legend { display: inline-flex; gap: 8px; align-items: center; font-size: 12px; color: var(--muted); }
+.legend .key { display: inline-block; width: 14px; height: 3px; border-radius: 2px; }
+.legend .key.dashed { background: repeating-linear-gradient(90deg, var(--accent) 0 5px, transparent 5px 8px); }
+
+/* release confidence */
+.conf-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; align-items: start; }
+.conf { display: grid; gap: 10px; }
+.conf h2 { font-size: 16px; font-weight: 800; }
+.conf-big { display: grid; gap: 2px; }
+.conf-big .num { font-size: 34px; font-weight: 800; line-height: 1.1; }
+.hist { display: flex; align-items: flex-end; gap: 2px; height: 64px; border-bottom: 1px solid var(--line); }
+.hist span { flex: 1; min-height: 1px; border-radius: 2px 2px 0 0; }
+.hist span.in { background: var(--good); }
+.hist span.out { background: color-mix(in srgb, var(--bad) 70%, var(--surface)); }
+.conf-dates { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.conf-dates > span { display: grid; gap: 2px; font-size: 12px; }
+.conf-dates b { font-size: 14px; }

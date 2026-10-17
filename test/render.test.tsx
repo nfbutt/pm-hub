@@ -11,6 +11,8 @@ import { Gantt } from "../src/views/Gantt";
 import { Overview } from "../src/views/Overview";
 import { Releases } from "../src/views/Releases";
 import { Settings } from "../src/views/Settings";
+import { BurnUp } from "../src/views/BurnUp";
+import { Confidence } from "../src/views/Confidence";
 import { Progress } from "../src/views/Progress";
 import { Schedule } from "../src/views/Schedule";
 import { Workload } from "../src/views/Workload";
@@ -70,5 +72,18 @@ describe("views render with the demo project", () => {
   it("Settings", () => {
     const html = renderToString(<Settings project={project} mapping={mapping} setMapping={noop} resetMapping={noop} prefs={defaultPrefs} setPrefs={noop} />);
     expect(html).toContain("Start date field");
+  });
+});
+
+describe("forecast views render with the demo project", () => {
+  it("Burn-up", () => {
+    const html = renderToString(<BurnUp project={project} mapping={mapping} />);
+    expect(html).toContain("Scope and done");
+    expect(html).toContain("<svg");
+  });
+  it("Release confidence", () => {
+    const html = renderToString(<Confidence project={project} mapping={mapping} />);
+    expect(html).toContain("Release confidence");
+    expect(html).toMatch(/chance of finishing by the due date|Done/);
   });
 });

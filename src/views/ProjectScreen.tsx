@@ -5,6 +5,8 @@ import { TopBar } from "../ui/TopBar";
 import { UserMenu } from "../ui/UserMenu";
 import { DEMO_OWNER } from "../demo/fixture";
 import { Gantt } from "./Gantt";
+import { BurnUp } from "./BurnUp";
+import { Confidence } from "./Confidence";
 import { Overview } from "./Overview";
 import { Progress } from "./Progress";
 import { Schedule } from "./Schedule";
@@ -22,6 +24,8 @@ const TABS: { id: ViewId; label: string }[] = [
   { id: "schedule", label: "Schedule" },
   { id: "progress", label: "Progress" },
   { id: "workload", label: "Status & workload" },
+  { id: "burnup", label: "Burn-up" },
+  { id: "confidence", label: "Release confidence" },
   { id: "settings", label: "Settings" },
 ];
 
@@ -81,6 +85,8 @@ export function ProjectScreen({ source, view, onSignOut }: { source: Source; vie
             {active === "schedule" && <Schedule project={project} mapping={mapping} draft={draft} />}
             {active === "progress" && <Progress project={project} mapping={mapping} draft={draft} />}
             {active === "workload" && <Workload project={project} mapping={mapping} draft={draft} />}
+            {active === "burnup" && <BurnUp project={project} mapping={mapping} />}
+            {active === "confidence" && <Confidence project={project} mapping={mapping} />}
             {active === "settings" && <Settings project={project} mapping={mapping} setMapping={state.setMapping} resetMapping={state.resetMapping} prefs={prefs} setPrefs={setPrefs} />}
           </>
         )}
