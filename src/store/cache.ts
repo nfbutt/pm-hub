@@ -47,9 +47,13 @@ export async function forgetProject(owner: string, number: number) {
 }
 
 // Small per-browser view preferences.
-export interface Prefs { zoom: "week" | "month" | "quarter"; fyStartMonth: number; includeClosed: boolean }
+export interface Prefs {
+  zoom: "week" | "month" | "quarter"; fyStartMonth: number; includeClosed: boolean;
+  /** What happens to dependents when a blocker's dates move. */
+  shiftMode: "keep-gap" | "on-overlap" | "none";
+}
 const PREFS = "pm-hub:prefs";
-export const defaultPrefs: Prefs = { zoom: "month", fyStartMonth: 1, includeClosed: false };
+export const defaultPrefs: Prefs = { zoom: "month", fyStartMonth: 1, includeClosed: false, shiftMode: "on-overlap" };
 export function readPrefs(): Prefs {
   try { return { ...defaultPrefs, ...JSON.parse(localStorage.getItem(PREFS) ?? "{}") }; } catch { return defaultPrefs; }
 }

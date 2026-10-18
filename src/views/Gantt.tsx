@@ -1,10 +1,11 @@
-import { useMemo, useRef, useState, type PointerEvent as RPointerEvent } from "react";
+import { Fragment, useMemo, useRef, useState, type PointerEvent as RPointerEvent } from "react";
 import { axis, DAY_PX, SNAP_DAYS, xOf, type Zoom } from "../model/axis";
 import { addDays, priorityOf, type Mapping } from "../model/mapping";
 import type { Item, Project } from "../model/normalize";
 import { rowsToCsv, rowsToMarkdown } from "../model/export";
 import { buildSchedule, daysBetween, findConflicts, ganttRows, releaseColumns, timeWindow, type Draft, type Row } from "../model/schedule";
 import { datesOp } from "../model/ops";
+import { addBlocker, moveToParent, newItem, setDatesWithDependents, setTitle } from "../model/edits";
 import type { Prefs } from "../store/cache";
 import { CopyBox } from "../ui/CopyBox";
 import { Modal } from "../ui/Drawer";
@@ -25,17 +26,22 @@ interface Props {
   editor?: Editor;
   changed: number; onDiscardAll?: () => void;
   prefs: Prefs; setPrefs: (p: Prefs) => void;
+  /** Multi-selection shared with the command menu. */
+  selected?: Set<string>; onSelect?: (keys: Set<string>) => void;
 }
 
-export function Gantt({ project, mapping, draft, editor, changed, onDiscardAll, prefs, setPrefs }: Props) {
+export function Gantt({ project, mapping, draft, editor, changed, onDiscardAll, prefs, setPrefs, selected = new Set(), onSelect }: Props) {
+  const [renaming, setRenaming] = useState<{ key: string; text: string } | null>(null);
+  const [addingTo, setAddingTo] = useState<{ key: string; text: string } | null>(null);
+  const [link, setLink] = useState<{ from: string; x0: number; y0: number; x: number; y: number } | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [open, setOpen] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
   const [live, setLive] = useState<{ key: string; start: string; end: string } | null>(null);
   const drag = useRef<{ key: string; mode: "move" | "l" | "r"; x0: number; start: string; end: string; moved: boolean } | null>(null);
-  const [rowDrag, setRowDrag] = useState<{ key: string; lane: string } | null>(null);
-  const [dropAt, setDropAt] = useState<{ key: string; above: boolean } | null>(null);
+  const [rowDrag, setRowDrag] = useState<{ key: string; lane: string; depth: number } | null>(null);
+  const [dropAt, setDropAt] = useState<{ key: string; above: boolean; into?: boolean } | null>(null);
 
   const zoom: Zoom = prefs.zoom;
   const dayPx = DAY_PX[zoom];
@@ -82,6 +88,7 @@ export function Gantt({ project, mapping, draft, editor, changed, onDiscardAll, 
     e.preventDefault();
   }
   function onBarMove(e: RPointerEvent) {
+    if (link) { setLink({ ...link, x: e.clientX, y: e.clientY }); return; }
     const d = drag.current; if (!d) return;
     const snap = SNAP_DAYS[zoom];
     const delta = Math.round((e.clientX - d.x0) / dayPx / snap) * snap;
@@ -93,12 +100,24 @@ export function Gantt({ project, mapping, draft, editor, changed, onDiscardAll, 
     if (d.mode === "r") { end = addDays(d.end, delta); if (end < start) end = start; }
     setLive({ key: d.key, start, end });
   }
-  function onBarUp() {
+  function onBarUp(e?: RPointerEvent) {
+    if (link && e) {
+      const target = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest<HTMLElement>("[data-key]")?.dataset.key;
+      const to = target ? schedule.byKey.get(target) : undefined, from = schedule.byKey.get(link.from);
+      if (editor && to && from && to.key !== from.key) {
+        const ops = addBlocker(project, to, from.key);
+        if (ops.length) editor.record(`${to.title} is now blocked by ${from.title}`, ops);
+      }
+      setLink(null); return;
+    }
     const d = drag.current; drag.current = null;
     if (!d) return;
     const item = schedule.byKey.get(d.key);
-    if (d.moved && live && item && editor) editor.record(`Moved ${item.title} to ${short(live.start)} – ${short(live.end)}`, [datesOp(item, mapping, live.start, live.end)]);
-    else setOpen(d.key);
+    if (d.moved && live && item && editor) {
+      const ops = setDatesWithDependents(project, mapping, d.key, live.start, live.end, prefs.shiftMode);
+      const extra = ops.length - 1;
+      editor.record(`Moved ${item.title} to ${short(live.start)} – ${short(live.end)}${extra ? ` and ${extra} dependent${extra > 1 ? "s" : ""}` : ""}`, ops);
+    } else setOpen(d.key);
     setLive(null);
   }
 
@@ -112,8 +131,14 @@ export function Gantt({ project, mapping, draft, editor, changed, onDiscardAll, 
     [order[i], order[j]] = [order[j]!, order[i]!];
     editor?.record(`Reordered ${g.lane}`, [{ kind: "reorder", lane: g.lane, before, after: order }]);
   }
-  function dropRow(targetKey: string, lane: string, above: boolean) {
-    if (!rowDrag || rowDrag.lane !== lane || rowDrag.key === targetKey) return;
+  function dropRow(targetKey: string, lane: string, above: boolean, into?: boolean) {
+    if (!rowDrag || rowDrag.key === targetKey) return;
+    if (into) {
+      const it = schedule.byKey.get(rowDrag.key), target = schedule.byKey.get(targetKey);
+      if (it && target && editor) editor.record(`Moved ${it.title} under ${target.title}`, moveToParent(project, it, target.key));
+      return;
+    }
+    if (rowDrag.lane !== lane || rowDrag.depth > 0) return;
     const before = laneOrder(lane);
     const order = before.filter(k => k !== rowDrag.key);
     order.splice(order.indexOf(targetKey) + (above ? 0 : 1), 0, rowDrag.key);
@@ -135,6 +160,17 @@ export function Gantt({ project, mapping, draft, editor, changed, onDiscardAll, 
         <button className="btn" onClick={() => setExpanded(expanded.size ? new Set() : new Set(groups.flatMap(g => g.rows.filter(r => r.depth === 0 && hasKids(r.item)).map(r => r.item.key))))}>
           {expanded.size ? "Collapse all" : "Expand all"}
         </button>
+        {editor && (
+          <label className="check" title="What happens to items blocked by a bar you move">
+            Dependents
+            <select id="g-shift" className="mini-select" value={prefs.shiftMode} onChange={e => setPrefs({ ...prefs, shiftMode: e.target.value as Prefs["shiftMode"] })}>
+              <option value="on-overlap">move only if they would overlap</option>
+              <option value="keep-gap">keep their gap</option>
+              <option value="none">stay put</option>
+            </select>
+          </label>
+        )}
+        {selected.size > 0 && <span className="pill accent">{selected.size} selected · <kbd>Ctrl K</kbd></span>}
         <span className="spacer" />
         {!editor && <span className="pill">Showing GitHub only</span>}
         {editor && changed > 0 && <span className="pill warn">{changed} change{changed > 1 ? "s" : ""}, not on GitHub yet</span>}
@@ -165,7 +201,7 @@ export function Gantt({ project, mapping, draft, editor, changed, onDiscardAll, 
         <div className="board card">
           <div className="gscroll">
             <div className="gantt" style={{ width: `calc(var(--lw) + ${width}px)` }} onPointerMove={onBarMove} onPointerUp={onBarUp}
-              onPointerCancel={() => { drag.current = null; setLive(null); }}>
+              onPointerCancel={() => { drag.current = null; setLive(null); setLink(null); }}>
               <div className="bg" style={{ width }}>
                 {ax.months.map((m, i) => i % 2 ? <div key={m.start} className="band" style={{ left: xOf(win.start, m.start, dayPx), width: m.days * dayPx }} /> : null)}
                 {zoom !== "quarter" && ax.weeks.map(w => <div key={w.start} className="wline" style={{ left: xOf(win.start, w.start, dayPx) }} />)}
@@ -200,25 +236,44 @@ export function Gantt({ project, mapping, draft, editor, changed, onDiscardAll, 
                     const pct = r.item.subIssues ? (100 * r.item.subIssues.completed) / r.item.subIssues.total : r.item.state === "open" ? 0 : 100;
                     const isDrop = dropAt?.key === r.item.key;
                     return (
-                      <div key={r.item.key} className={`grow erow ${r.depth ? "child" : ""} ${isDrop ? (dropAt!.above ? "drop-above" : "drop-below") : ""}`}
-                        onDragOver={e => { if (!rowDrag || r.depth || rowDrag.lane !== g.lane) return; e.preventDefault(); const b = e.currentTarget.getBoundingClientRect(); setDropAt({ key: r.item.key, above: e.clientY < b.top + b.height / 2 }); }}
-                        onDrop={e => { e.preventDefault(); if (dropAt) dropRow(r.item.key, g.lane, dropAt.above); setRowDrag(null); setDropAt(null); }}>
+                      <Fragment key={r.item.key}>
+                      <div className={`grow erow ${r.depth ? "child" : ""} ${selected.has(r.item.key) ? "selected" : ""} ${isDrop ? (dropAt!.into ? "drop-into" : dropAt!.above ? "drop-above" : "drop-below") : ""}`}
+                        data-key={r.item.key}
+                        onDragOver={e => {
+                          if (!rowDrag || r.depth || rowDrag.key === r.item.key) return;
+                          const into = rowDrag.depth > 0;
+                          if (!into && rowDrag.lane !== g.lane) return;
+                          e.preventDefault(); const b = e.currentTarget.getBoundingClientRect();
+                          setDropAt({ key: r.item.key, above: e.clientY < b.top + b.height / 2, into });
+                        }}
+                        onDrop={e => { e.preventDefault(); if (dropAt) dropRow(r.item.key, g.lane, dropAt.above, dropAt.into); setRowDrag(null); setDropAt(null); }}>
                         <div className="gl">
-                          {r.depth === 0 ? (
-                            <button className="grip" draggable={!!editor} disabled={!editor} aria-label={`Reorder ${r.item.title}`} title="Drag to reorder"
-                              onDragStart={e => { setRowDrag({ key: r.item.key, lane: g.lane }); e.dataTransfer.effectAllowed = "move"; }}
-                              onDragEnd={() => { setRowDrag(null); setDropAt(null); }}>⋮⋮</button>
-                          ) : <span />}
+                          <button className="grip" draggable={!!editor} disabled={!editor} aria-label={`${r.depth ? "Move" : "Reorder"} ${r.item.title}`}
+                            title={r.depth ? "Drag onto another epic to move it there" : "Drag to reorder"}
+                            onDragStart={e => { setRowDrag({ key: r.item.key, lane: g.lane, depth: r.depth }); e.dataTransfer.effectAllowed = "move"; }}
+                            onDragEnd={() => { setRowDrag(null); setDropAt(null); }}>⋮⋮</button>
                           {hasKids(r.item) ? (
                             <button className="twist" aria-expanded={expanded.has(r.item.key)} aria-label="Show sub-issues"
                               onClick={() => { const n = new Set(expanded); n.has(r.item.key) ? n.delete(r.item.key) : n.add(r.item.key); setExpanded(n); }}>
                               {expanded.has(r.item.key) ? "▾" : "▸"}
                             </button>
                           ) : <span />}
-                          <button className="ename" onClick={() => setOpen(r.item.key)} title={r.item.title}>
-                            <span className="etitle">{r.item.title}</span>
-                            {r.item.number && <span className="enum">#{r.item.number}</span>}
-                          </button>
+                          {renaming?.key === r.item.key ? (
+                            <input className="rename" autoFocus value={renaming.text} aria-label="New title"
+                              onChange={e => setRenaming({ key: r.item.key, text: e.target.value })}
+                              onBlur={() => { editor?.record(`Renamed to “${renaming.text.trim()}”`, setTitle(r.item, renaming.text)); setRenaming(null); }}
+                              onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") setRenaming(null); }} />
+                          ) : (
+                            <button className="ename" title={editor ? `${r.item.title} (double-click to rename, Ctrl-click to select)` : r.item.title}
+                              onClick={e => {
+                                if ((e.ctrlKey || e.metaKey || e.shiftKey) && onSelect) { const n = new Set(selected); if (n.has(r.item.key)) n.delete(r.item.key); else n.add(r.item.key); onSelect(n); return; }
+                                setOpen(r.item.key);
+                              }}
+                              onDoubleClick={() => { if (editor) setRenaming({ key: r.item.key, text: r.item.title }); }}>
+                              <span className="etitle">{r.item.title}</span>
+                              {r.item.number && <span className="enum">#{r.item.number}</span>}
+                            </button>
+                          )}
                         </div>
                         <div className="gt" style={{ width }}>
                           {r.moved && r.original && (
@@ -238,8 +293,31 @@ export function Gantt({ project, mapping, draft, editor, changed, onDiscardAll, 
                               <span className="h r" data-h="r" />
                             </div>
                           ))}
+                          {editor && r.bar && r.item.state === "open" && (
+                            <span className="linkdot" title="Drag onto another bar: that item becomes blocked by this one"
+                              style={{ left: xOf(win.start, r.bar.end, dayPx) + dayPx + 3 }}
+                              onPointerDown={e => { e.preventDefault(); e.stopPropagation(); (e.currentTarget.closest(".gantt") as HTMLElement).setPointerCapture(e.pointerId); setLink({ from: r.item.key, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY }); }} />
+                          )}
                         </div>
                       </div>
+                      {editor && r.depth === 0 && expanded.has(r.item.key) && (
+                        <div className="grow erow child addrow">
+                          <div className="gl">
+                            <span /><span />
+                            {addingTo?.key === r.item.key ? (
+                              <input className="rename" autoFocus placeholder="New story title, then Enter" value={addingTo.text} aria-label="New story title"
+                                onChange={e => setAddingTo({ key: r.item.key, text: e.target.value })}
+                                onBlur={() => setAddingTo(null)}
+                                onKeyDown={e => {
+                                  if (e.key === "Escape") setAddingTo(null);
+                                  if (e.key === "Enter" && addingTo.text.trim()) { editor.record(`Added “${addingTo.text.trim()}” under ${r.item.title}`, newItem(project, mapping, addingTo.text, { parentKey: r.item.key })); setAddingTo({ key: r.item.key, text: "" }); }
+                                }} />
+                            ) : <button className="ename addstory" onClick={() => setAddingTo({ key: r.item.key, text: "" })}>+ Story</button>}
+                          </div>
+                          <div className="gt" style={{ width }} />
+                        </div>
+                      )}
+                      </Fragment>
                     );
                   })}
                 </div>
@@ -268,9 +346,12 @@ export function Gantt({ project, mapping, draft, editor, changed, onDiscardAll, 
         </div>
       )}
 
+      {link && (
+        <svg className="linkline" aria-hidden="true"><line x1={link.x0} y1={link.y0} x2={link.x} y2={link.y} /></svg>
+      )}
       {openItem && (
-        <ItemDrawer item={openItem} mapping={mapping} schedule={schedule} original={original} draft={draft} conflicts={conflicts}
-          onClose={() => setOpen(null)} editor={editor} onMove={dir => moveRow(openItem.key, dir)} />
+        <ItemDrawer item={openItem} project={project} mapping={mapping} schedule={schedule} original={original} draft={draft} conflicts={conflicts}
+          onClose={() => setOpen(null)} editor={editor} onOpen={setOpen} onMove={openItem.parentKey ? undefined : dir => moveRow(openItem.key, dir)} />
       )}
       {exporting && (
         <Modal title="Export this arrangement" onClose={() => setExporting(false)}>
