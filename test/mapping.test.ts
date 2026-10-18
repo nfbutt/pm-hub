@@ -68,3 +68,11 @@ describe("item helpers", () => {
     expect(splitPrefixed("bug")).toBeNull();
   });
 });
+
+describe("priority detection", () => {
+  it("finds an unused Priority field so a fresh project can still be prioritised", () => {
+    const p = base();
+    p.items.forEach(i => { delete i.fields["Priority"]; });
+    expect(detectMapping(p).priority).toEqual({ kind: "field", field: "Priority" });
+  });
+});

@@ -2,7 +2,7 @@
 // undo history. Pure functions: the hook persists the result.
 import type { Mapping } from "./mapping";
 import type { Project } from "./normalize";
-import { changeId, datesOp, type Change, type Op } from "./ops";
+import { changeId, datesOp, slotOf, type Change, type Op } from "./ops";
 import { buildSchedule, type Draft } from "./schedule";
 
 export interface Scenario {
@@ -90,4 +90,13 @@ export function migrateLegacyDraft(draft: Draft, base: Project, m: Mapping): Sce
   for (const key of draft.parked) if (byKey.has(key)) changes.push({ id: changeId(), at, label: "Parked (from the v1 draft)", ops: [{ kind: "park", key, before: false, after: true }] });
   const s = newScenario("Default", changes);
   return { version: 1, active: s.id, scenarios: [s] };
+}
+
+/** After an apply: drops every op whose slot was applied (or deliberately dropped) from the active scenario. */
+export function removeSlots(st: ScenarioStore, slots: Set<string>): ScenarioStore {
+  if (!slots.size) return st;
+  return updateActive(st, s => {
+    const kept = activeChanges(s).map(c => ({ ...c, ops: c.ops.filter(o => !slots.has(slotOf(o))) })).filter(c => c.ops.length);
+    return { ...s, changes: kept, cursor: kept.length };
+  });
 }

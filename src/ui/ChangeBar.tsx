@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import type { ChangeSetState } from "../views/useChangeSet";
 
 /** Scenario picker, change count, undo/redo and the "GitHub only" switch, in the top bar. */
-export function ChangeBar({ cs, githubOnly, setGithubOnly }: { cs: ChangeSetState; githubOnly: boolean; setGithubOnly: (v: boolean) => void }) {
+export function ChangeBar({ cs, githubOnly, setGithubOnly, reviewHref }: { cs: ChangeSetState; githubOnly: boolean; setGithubOnly: (v: boolean) => void; reviewHref: string }) {
   const [form, setForm] = useState<null | { mode: "new" | "copy" | "rename"; name: string }>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const active = cs.scenarios.list.find(s => s.id === cs.scenarios.active);
@@ -50,7 +50,7 @@ export function ChangeBar({ cs, githubOnly, setGithubOnly }: { cs: ChangeSetStat
       )}
       <button className="iconbtn" onClick={cs.undo} disabled={!cs.canUndo || githubOnly} title="Undo (Ctrl+Z)" aria-label="Undo">↶</button>
       <button className="iconbtn" onClick={cs.redo} disabled={!cs.canRedo || githubOnly} title="Redo (Ctrl+Shift+Z)" aria-label="Redo">↷</button>
-      {count > 0 && !githubOnly && <span className="pill count" title="Changes in this scenario, not on GitHub yet">{count} change{count === 1 ? "" : "s"}</span>}
+      {count > 0 && !githubOnly && <a className="pill count" href={reviewHref} title="Review these changes and apply them to GitHub">{count} change{count === 1 ? "" : "s"} · Review</a>}
       <label className="check-row" style={{ fontSize: 12 }} title="Hide your changes and show the project exactly as GitHub has it">
         <input id="github-only" type="checkbox" checked={githubOnly} onChange={e => setGithubOnly(e.target.checked)} /> GitHub only
       </label>

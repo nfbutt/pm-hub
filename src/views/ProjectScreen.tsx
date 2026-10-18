@@ -3,6 +3,7 @@ import { emptyDraft } from "../model/schedule";
 import { shiftDates } from "../model/edits";
 import { CommandMenu } from "../ui/CommandMenu";
 import { Plan } from "./Plan";
+import { Review } from "./Review";
 import { ChangeBar } from "../ui/ChangeBar";
 import { UndoToast } from "../ui/Toast";
 import { hrefFor, type Route, type ViewId } from "../router";
@@ -82,7 +83,7 @@ export function ProjectScreen({ source, view, onSignOut }: { source: Source; vie
 
   const routeFor = (v: ViewId): Route =>
     source.kind === "demo" ? { kind: "demo", view: v } : { kind: "project", owner: source.owner, number: source.number, view: v };
-  const active = TABS.some(t => t.id === view) ? view : "overview";
+  const active = view === "review" || TABS.some(t => t.id === view) ? view : "overview";
 
   const crumb = (
     <>
@@ -93,7 +94,7 @@ export function ProjectScreen({ source, view, onSignOut }: { source: Source; vie
   );
   const right = (
     <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-      {project && cs.ready && <ChangeBar cs={cs} githubOnly={githubOnly} setGithubOnly={setGithubOnly} />}
+      {project && cs.ready && <ChangeBar cs={cs} githubOnly={githubOnly} setGithubOnly={setGithubOnly} reviewHref={hrefFor(routeFor("review"))} />}
       {source.kind === "github" && (
         <>
           {rate && rate.remaining < 500 && (
@@ -128,6 +129,9 @@ export function ProjectScreen({ source, view, onSignOut }: { source: Source; vie
             {errorKind === "not-found" && <a className="btn" href="#/">Choose another project</a>}
           </div>
         )}
+        {cs.ready && !cs.persistent && (
+          <div className="callout warn">This browser's storage isn't responding, so your changes won't be kept after you close this tab. Review and apply them before leaving.</div>
+        )}
         {!project && !error && <p className="muted">{progress ? `Loading items ${progress.loaded} of ${progress.total}…` : "Loading the project…"}</p>}
         {shown && mapping && (
           <>
@@ -141,6 +145,11 @@ export function ProjectScreen({ source, view, onSignOut }: { source: Source; vie
             {active === "burnup" && <BurnUp project={shown} mapping={mapping} />}
             {active === "confidence" && <Confidence project={shown} mapping={mapping} />}
             {active === "dependencies" && <Dependencies project={shown} mapping={mapping} draft={draft} />}
+            {active === "review" && project && cs.editor && (
+              <Review key={cs.scenarios.active} base={project} net={cs.net} titleOf={cs.editor.titleOf} client={source.kind === "github" ? source.client : null}
+                onApplied={slots => cs.removeSlots(slots)} onRecord={(label, ops) => cs.editor!.record(label, ops)} refresh={state.refresh}
+                goBack={() => { location.hash = hrefFor(routeFor("gantt")); }} />
+            )}
             {active === "settings" && project && <Settings project={project} mapping={mapping} setMapping={state.setMapping} resetMapping={state.resetMapping} prefs={prefs} setPrefs={setPrefs} />}
           </>
         )}
