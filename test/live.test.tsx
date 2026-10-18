@@ -45,7 +45,7 @@ describe.skipIf(!token)("live GitHub project", () => {
 
     const views: [string, JSX.Element][] = [
       ["overview", <Overview project={p} mapping={m} />],
-      ["gantt", <Gantt project={p} mapping={m} draft={emptyDraft()} setDraft={noop} resetDraft={noop} changed={0} prefs={defaultPrefs} setPrefs={noop} />],
+      ["gantt", <Gantt project={p} mapping={m} draft={emptyDraft()} changed={0} prefs={defaultPrefs} setPrefs={noop} />],
       ["releases", <Releases project={p} mapping={m} draft={emptyDraft()} />],
       ["schedule", <Schedule project={p} mapping={m} draft={emptyDraft()} />],
       ["progress", <Progress project={p} mapping={m} draft={emptyDraft()} />],

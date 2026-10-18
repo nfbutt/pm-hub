@@ -1,17 +1,20 @@
 import { isEpic, laneOf, priorityOf, releaseOf, statusOf, type Mapping } from "../model/mapping";
 import type { Item } from "../model/normalize";
 import type { Conflict, Draft, Schedule } from "../model/schedule";
+import { datesOp } from "../model/ops";
 import { Drawer } from "../ui/Drawer";
+import type { Editor } from "./useChangeSet";
 
 const SOURCE_LABEL: Record<string, string> = {
   fields: "date fields", iteration: "iteration", milestone: "milestone due date", children: "span of its sub-issues", draft: "your draft",
 };
 const fmt = (d: string) => new Date(d + "T00:00:00Z").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 
-export function ItemDrawer({ item, mapping, schedule, original, draft, conflicts, onClose, onDraft, onMove }: {
+export function ItemDrawer({ item, mapping, schedule, original, draft, conflicts, onClose, editor, onMove }: {
   item: Item; mapping: Mapping; schedule: Schedule; original: Schedule; draft?: Draft; conflicts: Conflict[];
   onClose: () => void;
-  onDraft?: (update: (d: Draft) => Draft) => void;
+  /** Present when edits are allowed. */
+  editor?: Editor;
   onMove?: (dir: -1 | 1) => void;
 }) {
   const bar = schedule.bars.get(item.key);
@@ -21,14 +24,14 @@ export function ItemDrawer({ item, mapping, schedule, original, draft, conflicts
   const prio = priorityOf(item, mapping);
   const mine = conflicts.filter(c => c.key === item.key);
   const parked = draft?.parked.includes(item.key) ?? false;
-  const moved = !!draft?.bars[item.key];
+  const moved = !!draft?.bars[item.key] || (!!bar && (!orig || orig.start !== bar.start || orig.end !== bar.end));
 
-  const setDate = (which: "start" | "end", value: string) => onDraft?.(d => {
-    const cur = d.bars[item.key] ?? (bar ? { start: bar.start, end: bar.end } : { start: value, end: value });
-    const next = { ...cur, [which]: value };
+  const setDate = (which: "start" | "end", value: string) => {
+    if (!editor) return;
+    const next = { start: bar?.start ?? value, end: bar?.end ?? value, [which]: value };
     if (next.start > next.end) { if (which === "start") next.end = next.start; else next.start = next.end; }
-    return { ...d, bars: { ...d.bars, [item.key]: next } };
-  });
+    editor.record(`Set ${item.title} to ${fmt(next.start)} – ${fmt(next.end)}`, [datesOp(item, mapping, next.start, next.end)]);
+  };
 
   return (
     <Drawer
@@ -48,19 +51,19 @@ export function ItemDrawer({ item, mapping, schedule, original, draft, conflicts
         <h3>Window</h3>
         {bar ? <p>{fmt(bar.start)} – {fmt(bar.end)} <span className="muted">from {SOURCE_LABEL[bar.source]}</span></p> : <p className="muted">No dates. Set them on GitHub, or drag it onto the chart from the tray.</p>}
         {moved && orig && <p className="muted" style={{ marginTop: 4 }}>On GitHub: {fmt(orig.start)} – {fmt(orig.end)}</p>}
-        {onDraft && (
+        {editor && (
           <div className="dates-edit" style={{ marginTop: 10 }}>
-            <label htmlFor="d-start">Draft start<input id="d-start" type="date" value={bar?.start ?? ""} onChange={e => e.target.value && setDate("start", e.target.value)} /></label>
-            <label htmlFor="d-end">Draft end<input id="d-end" type="date" value={bar?.end ?? ""} onChange={e => e.target.value && setDate("end", e.target.value)} /></label>
+            <label htmlFor="d-start">Start<input id="d-start" type="date" value={bar?.start ?? ""} onChange={e => e.target.value && setDate("start", e.target.value)} /></label>
+            <label htmlFor="d-end">End<input id="d-end" type="date" value={bar?.end ?? ""} onChange={e => e.target.value && setDate("end", e.target.value)} /></label>
           </div>
         )}
       </div>
 
-      {onDraft && (
+      {editor && (
         <div className="drow">
           {onMove && <><button className="btn" onClick={() => onMove(-1)}>Move up</button><button className="btn" onClick={() => onMove(1)}>Move down</button></>}
-          <button className="btn" disabled={!moved} onClick={() => onDraft(d => { const { [item.key]: _, ...rest } = d.bars; return { ...d, bars: rest }; })}>Back to GitHub dates</button>
-          <button className="btn" onClick={() => onDraft(d => ({ ...d, parked: parked ? d.parked.filter(k => k !== item.key) : [...d.parked, item.key] }))}>
+          <button className="btn" onClick={() => editor.discard(item.key)}>Undo all changes to this item</button>
+          <button className="btn" onClick={() => editor.record(`${parked ? "Put back" : "Parked"} ${item.title}`, [{ kind: "park", key: item.key, before: parked, after: !parked }])}>
             {parked ? "Put back on the chart" : "Park"}
           </button>
         </div>

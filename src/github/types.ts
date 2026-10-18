@@ -34,7 +34,7 @@ export interface ProjectMetaData {
   rateLimit: RateLimit;
 }
 
-type FieldRef = { field: { name?: string } | null };
+type FieldRef = { field: { id?: string; name?: string } | null };
 export type RawFieldValue =
   | ({ __typename: "ProjectV2ItemFieldDateValue"; date: string } & FieldRef)
   | ({ __typename: "ProjectV2ItemFieldSingleSelectValue"; name: string; optionId: string } & FieldRef)
@@ -44,26 +44,29 @@ export type RawFieldValue =
   | ({ __typename: "ProjectV2ItemFieldUserValue"; users: { nodes: { login: string }[] } } & FieldRef)
   | { __typename: string };
 
-interface RawPerson { login: string; avatarUrl?: string }
-interface RawMilestone { title: string; number: number; dueOn: string | null; state: string }
-interface RawRepoRef { nameWithOwner: string }
+// Node ids are optional here: GitHub always returns them, but projects cached before
+// pm-hub v2 were stored without them.
+interface RawPerson { id?: string; login: string; avatarUrl?: string }
+interface RawMilestone { id?: string; title: string; number: number; dueOn: string | null; state: string }
+interface RawRepoRef { id?: string; nameWithOwner: string }
+interface RawLabel { id?: string; name: string; color: string }
 
 export type RawContent =
   | {
-      __typename: "Issue"; number: number; title: string; url: string; state: "OPEN" | "CLOSED"; stateReason: string | null;
+      __typename: "Issue"; id?: string; number: number; title: string; url: string; state: "OPEN" | "CLOSED"; stateReason: string | null;
       createdAt: string; closedAt: string | null; updatedAt: string; repository: RawRepoRef;
-      labels: { nodes: { name: string; color: string }[] }; assignees: { nodes: RawPerson[] };
+      labels: { nodes: RawLabel[] }; assignees: { nodes: RawPerson[] };
       milestone: RawMilestone | null; issueType: { name: string } | null;
-      parent: { number: number; repository: RawRepoRef } | null;
+      parent: { id?: string; number: number; repository: RawRepoRef } | null;
       subIssuesSummary: { total: number; completed: number } | null;
-      blockedBy: { nodes: { number: number; state: string; repository: RawRepoRef }[] } | null;
+      blockedBy: { nodes: { id?: string; number: number; state: string; repository: RawRepoRef }[] } | null;
     }
   | {
-      __typename: "PullRequest"; number: number; title: string; url: string; state: "OPEN" | "CLOSED" | "MERGED";
+      __typename: "PullRequest"; id?: string; number: number; title: string; url: string; state: "OPEN" | "CLOSED" | "MERGED";
       createdAt: string; closedAt: string | null; updatedAt: string; repository: RawRepoRef;
-      labels: { nodes: { name: string; color: string }[] }; assignees: { nodes: RawPerson[] }; milestone: RawMilestone | null;
+      labels: { nodes: RawLabel[] }; assignees: { nodes: RawPerson[] }; milestone: RawMilestone | null;
     }
-  | { __typename: "DraftIssue"; title: string; createdAt: string; updatedAt: string; assignees: { nodes: RawPerson[] } }
+  | { __typename: "DraftIssue"; id?: string; title: string; createdAt: string; updatedAt: string; assignees: { nodes: RawPerson[] } }
   | null;
 
 export interface RawItem {

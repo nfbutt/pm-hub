@@ -4,6 +4,7 @@ import { del, get, set } from "idb-keyval";
 import type { Project } from "../model/normalize";
 import type { Mapping } from "../model/mapping";
 import type { Draft } from "../model/schedule";
+import type { ScenarioStore } from "../model/scenarios";
 
 const projectKey = (owner: string, number: number) => `project:${owner}/${number}`;
 const mappingKey = (owner: string, number: number) => `mapping:${owner}/${number}`;
@@ -28,9 +29,21 @@ export async function readDraft(owner: string, number: number): Promise<Draft | 
 export async function writeDraft(owner: string, number: number, d: Draft) {
   try { await set(draftKey(owner, number), d); } catch { /* optional */ }
 }
+/** Removes the pm-hub v1 draft once it has been migrated into a scenario. */
+export async function deleteLegacyDraft(owner: string, number: number) {
+  try { await del(draftKey(owner, number)); } catch { /* optional */ }
+}
+
+const changesKey = (owner: string, number: number) => `changes:${owner}/${number}`;
+export async function readChanges(owner: string, number: number): Promise<ScenarioStore | null> {
+  try { return (await get<ScenarioStore>(changesKey(owner, number))) ?? null; } catch { return null; }
+}
+export async function writeChanges(owner: string, number: number, st: ScenarioStore) {
+  try { await set(changesKey(owner, number), st); } catch { /* optional */ }
+}
 
 export async function forgetProject(owner: string, number: number) {
-  try { await Promise.all([del(projectKey(owner, number)), del(mappingKey(owner, number)), del(draftKey(owner, number))]); } catch { /* optional */ }
+  try { await Promise.all([del(projectKey(owner, number)), del(mappingKey(owner, number)), del(draftKey(owner, number)), del(changesKey(owner, number))]); } catch { /* optional */ }
 }
 
 // Small per-browser view preferences.

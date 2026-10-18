@@ -12,7 +12,11 @@ const day = (anchor: string, offset: number) => {
   const d = new Date(anchor + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + offset); return d.toISOString().slice(0, 10);
 };
 const ts = (date: string) => date + "T15:00:00Z";
-const field = (name: string) => ({ field: { name } });
+const field = (name: string) => ({ field: { id: `F_${name.replace(/W/g, "")}`, name } });
+const repoRef = (nameWithOwner: string) => ({ id: `R_${nameWithOwner.replace(/W/g, "_")}`, nameWithOwner });
+const issueId = (n: number) => `I_${n}`;
+const label = (name: string, color: string) => ({ id: `L_${name.replace(/W/g, "_")}`, name, color });
+const user = (login: string) => ({ id: `U_${login}`, login });
 
 export const DEMO_OWNER = "demo-co";
 const REPO = "demo-co/orbit";
@@ -36,7 +40,7 @@ export interface Fixture { meta: Meta; items: RawItem[]; anchor: string }
 /** anchor = "today" for the fixture (YYYY-MM-DD). Everything is placed relative to it. */
 export function makeFixture(anchor: string): Fixture {
   const r = rng(42);
-  const milestones = [0, 1, 2, 3].map(k => ({ title: `Release ${k + 1}`, number: k + 1, dueOn: ts(day(anchor, -21 + k * 28)), state: k === 0 ? "CLOSED" : "OPEN" }));
+  const milestones = [0, 1, 2, 3].map(k => ({ id: `M_${k + 1}`, title: `Release ${k + 1}`, number: k + 1, dueOn: ts(day(anchor, -21 + k * 28)), state: k === 0 ? "CLOSED" : "OPEN" }));
   const sprintStart = day(anchor, -84);
   const iterations = Array.from({ length: 14 }, (_, k) => ({ id: `it${k + 1}`, title: `Sprint ${k + 1}`, startDate: day(sprintStart, k * 14), duration: 14 }));
   const iterationFor = (date: string) => [...iterations].reverse().find(it => it.startDate <= date) ?? iterations[0]!;
@@ -66,26 +70,26 @@ export function makeFixture(anchor: string): Fixture {
         { __typename: "ProjectV2ItemFieldIterationValue", title: it.title, startDate: it.startDate, duration: it.duration, iterationId: it.id, ...field("Sprint") },
       ];
       if (s % 3 !== 2) fv.push({ __typename: "ProjectV2ItemFieldDateValue", date: sStart, ...field("Start date") }, { __typename: "ProjectV2ItemFieldDateValue", date: sEnd, ...field("Target date") });
-      const blockedBy = s > 0 && s % 2 === 0 ? [{ number: storyNums[s - 1]!, state: s - 1 < doneCount ? "CLOSED" : "OPEN", repository: { nameWithOwner: REPO } }] : [];
+      const blockedBy = s > 0 && s % 2 === 0 ? [{ id: issueId(storyNums[s - 1]!), number: storyNums[s - 1]!, state: s - 1 < doneCount ? "CLOSED" : "OPEN", repository: repoRef(REPO) }] : [];
       items.push({
         id: `item-${n}`, type: "ISSUE", isArchived: false, fieldValues: { nodes: fv },
         content: {
-          __typename: "Issue", number: n, title: `${STORY_VERBS[(s + ei) % STORY_VERBS.length]} ${STORY_NOUNS[(s * 3 + ei) % STORY_NOUNS.length]}`,
+          __typename: "Issue", id: issueId(n), number: n, title: `${STORY_VERBS[(s + ei) % STORY_VERBS.length]} ${STORY_NOUNS[(s * 3 + ei) % STORY_NOUNS.length]}`,
           url: `https://github.com/${REPO}/issues/${n}`, state: closed ? "CLOSED" : "OPEN", stateReason: closed ? "COMPLETED" : null,
           createdAt: created, closedAt, updatedAt: closedAt ?? ts(day(anchor, -Math.floor(r() * 40))),
-          repository: { nameWithOwner: ei % 3 === 2 ? REPO2 : REPO },
-          labels: { nodes: [{ name: "type: story", color: "c5def5" }, { name: `product: ${e.product}`, color: "0e8a16" }] },
-          assignees: { nodes: [{ login: ["ana", "ben", "chen", "dee", "eli"][(s + ei) % 5]! }] },
+          repository: repoRef(ei % 3 === 2 ? REPO2 : REPO),
+          labels: { nodes: [label("type: story", "c5def5"), label(`product: ${e.product}`, "0e8a16")] },
+          assignees: { nodes: [user(["ana", "ben", "chen", "dee", "eli"][(s + ei) % 5]!)] },
           milestone: ms, issueType: { name: "Task" },
-          parent: { number: epicNum, repository: { nameWithOwner: REPO } },
+          parent: { id: issueId(epicNum), number: epicNum, repository: repoRef(REPO) },
           subIssuesSummary: { total: 0, completed: 0 },
-          blockedBy: { nodes: ei % 3 === 2 ? blockedBy.map(b => ({ ...b, repository: { nameWithOwner: REPO2 } })) : blockedBy },
+          blockedBy: { nodes: ei % 3 === 2 ? blockedBy.map(b => ({ ...b, repository: repoRef(REPO2) })) : blockedBy },
         },
       });
     }
 
-    const epicBlockedBy = ei === 3 ? [{ number: epicNums[2]!, state: "OPEN", repository: { nameWithOwner: REPO } }]
-      : ei === 4 ? [{ number: epicNums[3]!, state: "OPEN", repository: { nameWithOwner: REPO } }] : [];
+    const epicBlockedBy = ei === 3 ? [{ id: issueId(epicNums[2]!), number: epicNums[2]!, state: "OPEN", repository: repoRef(REPO) }]
+      : ei === 4 ? [{ id: issueId(epicNums[3]!), number: epicNums[3]!, state: "OPEN", repository: repoRef(REPO) }] : [];
     items.push({
       id: `item-${epicNum}`, type: "ISSUE", isArchived: false,
       fieldValues: { nodes: [
@@ -95,11 +99,11 @@ export function makeFixture(anchor: string): Fixture {
         { __typename: "ProjectV2ItemFieldSingleSelectValue", name: e.prio[0]!.toUpperCase() + e.prio.slice(1), optionId: "p", ...field("Priority") },
       ] },
       content: {
-        __typename: "Issue", number: epicNum, title: e.title, url: `https://github.com/${REPO}/issues/${epicNum}`,
+        __typename: "Issue", id: issueId(epicNum), number: epicNum, title: e.title, url: `https://github.com/${REPO}/issues/${epicNum}`,
         state: e.done === 1 ? "CLOSED" : "OPEN", stateReason: e.done === 1 ? "COMPLETED" : null,
         createdAt: ts(day(anchor, e.start - 21)), closedAt: e.done === 1 ? ts(day(anchor, e.start + e.len - 2)) : null, updatedAt: ts(day(anchor, -2)),
-        repository: { nameWithOwner: REPO },
-        labels: { nodes: [{ name: "type: epic", color: "5319e7" }, { name: `product: ${e.product}`, color: "0e8a16" }] },
+        repository: repoRef(REPO),
+        labels: { nodes: [label("type: epic", "5319e7"), label(`product: ${e.product}`, "0e8a16")] },
         assignees: { nodes: [] }, milestone: null, issueType: { name: "Epic" }, parent: null,
         subIssuesSummary: { total: nStories, completed: doneCount },
         blockedBy: { nodes: epicBlockedBy },

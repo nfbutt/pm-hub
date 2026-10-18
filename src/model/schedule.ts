@@ -119,9 +119,11 @@ export function findConflicts(s: Schedule, draft: Draft = emptyDraft()): Conflic
 
 export interface Row { item: Item; lane: string; bar: Bar | null; depth: number; moved: boolean; original: Bar | null }
 
-/** Epic rows grouped by lane, ordered by the draft or by start date. */
-export function ganttRows(p: Project, m: Mapping, s: Schedule, draft: Draft, opts: { includeClosed: boolean; expanded: Set<string> }) {
-  const original = buildSchedule(p, m);
+/**
+ * Epic rows grouped by lane, ordered by the draft or by start date.
+ * `original` is the schedule as GitHub has it; a row whose bar differs from it is "moved".
+ */
+export function ganttRows(p: Project, m: Mapping, s: Schedule, draft: Draft, opts: { includeClosed: boolean; expanded: Set<string> }, original: Schedule = buildSchedule(p, m)) {
   const epics = p.items.filter(i => isEpic(i, m) && (opts.includeClosed || i.state === "open"));
   const lanes = new Map<string, Item[]>();
   for (const e of epics) {
@@ -134,7 +136,8 @@ export function ganttRows(p: Project, m: Mapping, s: Schedule, draft: Draft, opt
   const makeRow = (item: Item, lane: string, depth: number): Row => {
     const bar = draft.parked.includes(item.key) ? null : s.bars.get(item.key) ?? null;
     const orig = original.bars.get(item.key) ?? null;
-    return { item, lane, depth, bar, original: orig, moved: !!draft.bars[item.key] };
+    const moved = !!draft.bars[item.key] || (!!bar && (!orig || orig.start !== bar.start || orig.end !== bar.end));
+    return { item, lane, depth, bar, original: orig, moved };
   };
   return laneList.map(lane => {
     const items = lanes.get(lane)!;

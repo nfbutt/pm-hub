@@ -21,7 +21,19 @@ export type FieldValue =
   | { kind: "text"; text: string }
   | { kind: "users"; logins: string[] };
 
-export interface Milestone { title: string; number: number; dueOn: string | null; state: string; repo: string }
+export interface Milestone { id?: string | null; title: string; number: number; dueOn: string | null; state: string; repo: string }
+
+/** GitHub node ids needed to write changes back. Null when unknown (e.g. a project cached by pm-hub v1). */
+export interface ItemIds {
+  content: string | null;
+  repo: string | null;
+  parent: string | null;
+  /** label name -> label node id */
+  labels: Record<string, string>;
+  /** login -> user node id */
+  assignees: Record<string, string>;
+}
+export const emptyIds = (): ItemIds => ({ content: null, repo: null, parent: null, labels: {}, assignees: {} });
 
 export interface Item {
   /** Project item id. */
@@ -44,9 +56,10 @@ export interface Item {
   issueType: string | null;
   parentKey: string | null;
   subIssues: { total: number; completed: number } | null;
-  blockedBy: { key: string; open: boolean }[];
+  blockedBy: { key: string; open: boolean; id?: string | null }[];
   archived: boolean;
   fields: Record<string, FieldValue>;
+  ids: ItemIds;
 }
 
 export interface Project {
@@ -87,6 +100,12 @@ function normalizeField(f: RawField): FieldDef | null {
   return { kind, id: f.id, name: f.name, dataType: f.dataType };
 }
 
+function idMap<T extends { id?: string }>(nodes: T[], keyOf: (n: T) => string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const n of nodes) if (n.id) out[keyOf(n)] = n.id;
+  return out;
+}
+
 export function normalizeItem(raw: RawItem): Item {
   const fields: Record<string, FieldValue> = {};
   for (const v of raw.fieldValues.nodes) {
@@ -112,7 +131,7 @@ export function normalizeItem(raw: RawItem): Item {
   const base = {
     id: raw.id, archived: raw.isArchived, fields,
     labels: [] as string[], assignees: [] as string[], milestone: null, issueType: null, parentKey: null,
-    subIssues: null, blockedBy: [] as Item["blockedBy"], stateReason: null,
+    subIssues: null, blockedBy: [] as Item["blockedBy"], stateReason: null, ids: emptyIds(),
   };
   const c = raw.content;
   if (!c) return { ...base, key: raw.id, kind: "redacted", number: null, repo: null, title: "(no access)", url: null, state: "open", createdAt: null, closedAt: null, updatedAt: null };
@@ -121,6 +140,7 @@ export function normalizeItem(raw: RawItem): Item {
     return {
       ...base, key: raw.id, kind: "draft", number: null, repo: null, title: c.title, url: null, state: "open",
       createdAt: c.createdAt, closedAt: null, updatedAt: c.updatedAt, assignees: c.assignees.nodes.map(a => a.login),
+      ids: { ...emptyIds(), content: c.id ?? null, assignees: idMap(c.assignees.nodes, a => a.login) },
     };
   }
 
@@ -129,7 +149,11 @@ export function normalizeItem(raw: RawItem): Item {
     ...base, key: issueKey(repo, c.number), number: c.number, repo, title: c.title, url: c.url,
     createdAt: c.createdAt, closedAt: c.closedAt, updatedAt: c.updatedAt,
     labels: c.labels.nodes.map(l => l.name), assignees: c.assignees.nodes.map(a => a.login),
-    milestone: c.milestone ? { ...c.milestone, repo } : null,
+    milestone: c.milestone ? { ...c.milestone, id: c.milestone.id ?? null, repo } : null,
+    ids: {
+      ...emptyIds(), content: c.id ?? null, repo: c.repository.id ?? null,
+      labels: idMap(c.labels.nodes, l => l.name), assignees: idMap(c.assignees.nodes, a => a.login),
+    },
   };
   if (c.__typename === "PullRequest") {
     return { ...common, kind: "pr", state: c.state === "MERGED" ? "merged" : c.state === "CLOSED" ? "closed" : "open" };
@@ -138,8 +162,9 @@ export function normalizeItem(raw: RawItem): Item {
     ...common, kind: "issue", state: c.state === "CLOSED" ? "closed" : "open", stateReason: c.stateReason,
     issueType: c.issueType?.name ?? null,
     parentKey: c.parent ? issueKey(c.parent.repository.nameWithOwner, c.parent.number) : null,
+    ids: { ...common.ids, parent: c.parent?.id ?? null },
     subIssues: c.subIssuesSummary && c.subIssuesSummary.total > 0 ? c.subIssuesSummary : null,
-    blockedBy: (c.blockedBy?.nodes ?? []).map(b => ({ key: issueKey(b.repository.nameWithOwner, b.number), open: b.state === "OPEN" })),
+    blockedBy: (c.blockedBy?.nodes ?? []).map(b => ({ key: issueKey(b.repository.nameWithOwner, b.number), open: b.state === "OPEN", id: b.id ?? null })),
   };
 }
 
