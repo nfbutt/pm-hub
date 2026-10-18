@@ -13,6 +13,10 @@ import { Gantt } from "../src/views/Gantt";
 import { Overview } from "../src/views/Overview";
 import { Releases } from "../src/views/Releases";
 import { Settings } from "../src/views/Settings";
+import { Plan } from "../src/views/Plan";
+import { ItemDrawer } from "../src/views/ItemDrawer";
+import { CommandMenu } from "../src/ui/CommandMenu";
+import { buildSchedule } from "../src/model/schedule";
 import { Dependencies, layoutGraph } from "../src/views/Dependencies";
 import { BurnUp } from "../src/views/BurnUp";
 import { Confidence } from "../src/views/Confidence";
@@ -109,5 +113,35 @@ describe("dependency view", () => {
   it("lays every node inside the drawing", () => {
     const laid = layoutGraph({ nodes: project.items.filter(i => i.blockedBy.length || project.items.some(j => j.blockedBy.some(b => b.key === i.key))), edges: [] });
     for (const n of laid.nodes) { expect(n.x).toBeGreaterThan(0); expect(n.x).toBeLessThan(laid.width); }
+  });
+});
+
+describe("editing surfaces render", () => {
+  const editor: Editor = { base: project, record: noop, discard: noop, titleOf: k => k };
+  it("Plan table, editable and read-only", () => {
+    const html = renderToString(<Plan project={project} mapping={mapping} draft={emptyDraft()} editor={editor} selected={new Set()} onSelect={noop} />);
+    expect(html).toContain("+ New epic");
+    expect(html).toContain("cell-select");
+    const ro = renderToString(<Plan project={project} mapping={mapping} draft={emptyDraft()} selected={new Set()} onSelect={noop} />);
+    expect(ro).toContain("Read-only");
+  });
+  it("Plan bulk bar appears with a selection", () => {
+    const keys = new Set(project.items.filter(i => i.parentKey).slice(0, 3).map(i => i.key));
+    const html = renderToString(<Plan project={project} mapping={mapping} draft={emptyDraft()} editor={editor} selected={keys} onSelect={noop} />);
+    expect(html).toContain("3 selected");
+    expect(html).toContain("+1 week");
+  });
+  it("Item drawer shows editors when allowed", () => {
+    const item = project.items.find(i => i.title === "Offline mode")!;
+    const s = buildSchedule(project, mapping);
+    const html = renderToString(<ItemDrawer item={item} project={project} mapping={mapping} schedule={s} original={s} conflicts={[]} editor={editor} onClose={noop} />);
+    for (const t of ["Title", "Priority", "Lane", "Owners", "Epic", "Split…", "+ Story", "Add a blocker"]) expect(html, t).toContain(t);
+  });
+  it("Command menu lists selection actions", () => {
+    const keys = new Set([project.items.find(i => i.title === "Offline mode")!.key]);
+    const html = renderToString(<CommandMenu project={project} mapping={mapping} editor={editor} selected={keys} onSelect={noop} views={[{ id: "gantt", label: "Gantt" }]}
+      go={noop} undo={noop} redo={noop} toggleGithubOnly={noop} onClose={noop} />);
+    expect(html).toContain("Shift “Offline mode” +1 week");
+    expect(html).toContain("Move “Offline mode” under an epic…");
   });
 });

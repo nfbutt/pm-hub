@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 import { emptyDraft } from "../model/schedule";
+import { shiftDates } from "../model/edits";
+import { CommandMenu } from "../ui/CommandMenu";
+import { Plan } from "./Plan";
 import { ChangeBar } from "../ui/ChangeBar";
 import { UndoToast } from "../ui/Toast";
 import { hrefFor, type Route, type ViewId } from "../router";
@@ -24,6 +27,7 @@ import { useProject, type Source } from "./useProject";
 const TABS: { id: ViewId; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "gantt", label: "Gantt" },
+  { id: "plan", label: "Plan" },
   { id: "releases", label: "Releases" },
   { id: "schedule", label: "Schedule" },
   { id: "progress", label: "Progress" },
@@ -42,24 +46,37 @@ export function ProjectScreen({ source, view, onSignOut }: { source: Source; vie
   const number = source.kind === "github" ? source.number : 1;
   const cs = useChangeSet(owner, number, project, mapping);
   const [githubOnly, setGithubOnly] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [menuOpen, setMenuOpen] = useState(false);
   // Views see the project as edited, unless "GitHub only" is on. Editing waits until saved changes have loaded.
   const shown = !githubOnly && cs.applied ? cs.applied.project : project;
   const draft = !githubOnly && cs.applied ? cs.applied.local : emptyDraft();
   const editor = !githubOnly && cs.ready && cs.editor ? cs.editor : undefined;
 
-  // Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z (or Ctrl+Y), except while typing in a field.
+  // Keyboard: Ctrl/Cmd+K command menu, Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y) undo and redo,
+  // [ and ] shift the selection a week, Esc clears it. Ignored while typing in a field.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const el = e.target as HTMLElement | null;
-      if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
-      if (!(e.ctrlKey || e.metaKey) || githubOnly) return;
       const k = e.key.toLowerCase();
-      if (k === "z" && !e.shiftKey) { e.preventDefault(); cs.undo(); }
-      else if ((k === "z" && e.shiftKey) || k === "y") { e.preventDefault(); cs.redo(); }
+      if ((e.ctrlKey || e.metaKey) && k === "k") { e.preventDefault(); setMenuOpen(o => !o); return; }
+      const el = e.target as HTMLElement | null;
+      if (menuOpen || (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)))) return;
+      if (e.ctrlKey || e.metaKey) {
+        if (githubOnly) return;
+        if (k === "z" && !e.shiftKey) { e.preventDefault(); cs.undo(); }
+        else if ((k === "z" && e.shiftKey) || k === "y") { e.preventDefault(); cs.redo(); }
+        return;
+      }
+      if (k === "escape" && selected.size && !document.querySelector(".drawer")) { setSelected(new Set()); return; }
+      if ((e.key === "[" || e.key === "]") && selected.size && editor && cs.applied) {
+        e.preventDefault();
+        const days = e.key === "]" ? 7 : -7;
+        editor.record(`Shifted ${selected.size} item${selected.size > 1 ? "s" : ""} ${days > 0 ? "a week later" : "a week earlier"}`, shiftDates(cs.applied.project, mapping!, [...selected], days));
+      }
     };
     addEventListener("keydown", onKey);
     return () => removeEventListener("keydown", onKey);
-  }, [cs, githubOnly]);
+  }, [cs, githubOnly, menuOpen, selected, editor, mapping]);
   const [prefs, setPrefsState] = useState<Prefs>(readPrefs);
   const setPrefs = (p: Prefs) => { setPrefsState(p); writePrefs(p); };
 
@@ -115,7 +132,8 @@ export function ProjectScreen({ source, view, onSignOut }: { source: Source; vie
         {shown && mapping && (
           <>
             {active === "overview" && <Overview project={shown} mapping={mapping} />}
-            {active === "gantt" && <Gantt project={shown} mapping={mapping} draft={draft} editor={editor} changed={githubOnly ? 0 : cs.net.length} onDiscardAll={editor ? cs.clear : undefined} prefs={prefs} setPrefs={setPrefs} />}
+            {active === "gantt" && <Gantt project={shown} mapping={mapping} draft={draft} editor={editor} changed={githubOnly ? 0 : cs.net.length} onDiscardAll={editor ? cs.clear : undefined} prefs={prefs} setPrefs={setPrefs} selected={selected} onSelect={setSelected} />}
+            {active === "plan" && <Plan project={shown} mapping={mapping} draft={draft} editor={editor} selected={selected} onSelect={setSelected} />}
             {active === "releases" && <Releases project={shown} mapping={mapping} draft={draft} />}
             {active === "schedule" && <Schedule project={shown} mapping={mapping} draft={draft} />}
             {active === "progress" && <Progress project={shown} mapping={mapping} draft={draft} />}
@@ -127,6 +145,11 @@ export function ProjectScreen({ source, view, onSignOut }: { source: Source; vie
           </>
         )}
         <UndoToast action={cs.lastAction} onUndo={cs.undo} canUndo={cs.canUndo && !githubOnly} />
+        {menuOpen && shown && mapping && (
+          <CommandMenu project={shown} mapping={mapping} editor={editor} selected={selected} onSelect={setSelected}
+            views={TABS} go={v => { location.hash = hrefFor(routeFor(v as ViewId)); }}
+            undo={cs.undo} redo={cs.redo} toggleGithubOnly={() => setGithubOnly(g => !g)} onClose={() => setMenuOpen(false)} />
+        )}
       </main>
     </>
   );
