@@ -6,6 +6,10 @@ import { writeAccess, type GitHubClient } from "../github/client";
 import type { Item, Project } from "../model/normalize";
 import { inverse, isNewKey, remapKeys, slotOf, type Op } from "../model/ops";
 import { Modal } from "../ui/Drawer";
+import { snapshot } from "../model/diff";
+import type { Mapping } from "../model/mapping";
+import { buildSchedule } from "../model/schedule";
+import type { HistoryState } from "./useHistory";
 
 type Phase = "checking" | "ready" | "applying" | "done";
 const STATUS: Record<Step["status"], [string, string]> = {
@@ -24,9 +28,14 @@ interface Props {
   onRecord: (label: string, ops: Op[]) => void;
   refresh: () => void;
   goBack: () => void;
+  mapping: Mapping;
+  /** Where to record a baseline before, and a change file after, each apply. */
+  history?: HistoryState;
+  scenario: string;
 }
 
-export function Review({ base, net, titleOf, client, onApplied, onRecord, refresh, goBack }: Props) {
+export function Review({ base, net, titleOf, client, onApplied, onRecord, refresh, goBack, mapping, history, scenario }: Props) {
+  const [histNote, setHistNote] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>("checking");
   const [steps, setSteps] = useState<Step[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -81,7 +90,13 @@ export function Review({ base, net, titleOf, client, onApplied, onRecord, refres
       const res = await execute(client, base, run.map(s => ({ ...s })), ctx.current.current, ctx.current.repos, { dryRun: true });
       setDry(res.calls); return;
     }
-    setPhase("applying"); setSteps(run);
+    setPhase("applying"); setSteps(run); setHistNote(null);
+    // History never blocks an apply: a failed write is reported, not fatal.
+    const notes: string[] = [];
+    if (history) {
+      try { await history.saveBaseline(snapshot(base, mapping, buildSchedule(base, mapping), "Before apply", true)); }
+      catch (e) { notes.push(`the baseline before applying (${e instanceof Error ? e.message : "unknown error"})`); }
+    }
     const res = await execute(client, base, run, ctx.current.current, ctx.current.repos, { onStep: s => patch(s.id, { status: s.status, message: s.message }) });
     // Map draft keys of created items to their new GitHub keys, so the revert can find them.
     const keyMap = new Map<string, string>();
@@ -92,6 +107,18 @@ export function Review({ base, net, titleOf, client, onApplied, onRecord, refres
     setRevertOps(revert);
     if (status.post && applied.length) {
       try { await postStatusUpdate(client, base.id, status.value, status.body || summary(applied)); } catch { /* reported below */ }
+    }
+    if (history) {
+      try {
+        await history.saveChange({
+          version: 1, at: new Date().toISOString(), author: history.author, scenario,
+          steps: res.steps.filter(s => s.status !== "local").map(s => ({
+            label: s.label, status: s.status, kind: s.op.kind, ...("key" in s.op ? { key: s.op.key } : {}),
+            ...(s.message ? { message: s.message } : {}), ...(s.reason ? { reason: s.reason } : {}),
+          })),
+        });
+      } catch (e) { notes.push(`the change record (${e instanceof Error ? e.message : "unknown error"})`); }
+      if (notes.length) setHistNote(`Your changes were applied, but pm-hub couldn't save ${notes.join(" or ")} to the plan history.`);
     }
     setSteps([...res.steps]);
     setPhase("done");
@@ -186,6 +213,7 @@ export function Review({ base, net, titleOf, client, onApplied, onRecord, refres
       {phase === "done" && (
         <div className={`callout ${failed ? "warn" : "info"}`} style={{ display: "grid", gap: 8 }}>
           <b>{applied} applied{failed ? `, ${failed} failed` : ""}.</b>
+          {histNote && <span>{histNote}</span>}
           <span>{failed ? "Failed changes stay in your draft so you can fix and retry them." : "Your draft now holds only what wasn't sent."} The project is refreshing from GitHub.</span>
           <div style={{ display: "flex", gap: 8 }}>
             {revertOps.length > 0 && <button className="btn" onClick={() => { onRecord(`Revert of the apply at ${new Date().toLocaleTimeString()}`, revertOps); setRevertOps([]); }}>Prepare a revert of this apply</button>}

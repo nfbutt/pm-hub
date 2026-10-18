@@ -1,11 +1,14 @@
 import { labelPrefixes, type LaneRule, type Mapping, type ReleaseRule } from "../model/mapping";
 import type { Project } from "../model/normalize";
 import type { Prefs } from "../store/cache";
+import type { ReactNode } from "react";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-export function Settings({ project, mapping, setMapping, resetMapping, prefs, setPrefs }: {
+export function Settings({ project, mapping, setMapping, resetMapping, prefs, setPrefs, extra }: {
   project: Project; mapping: Mapping; setMapping: (m: Mapping) => void; resetMapping: () => void; prefs: Prefs; setPrefs: (p: Prefs) => void;
+  /** More sections (history) rendered at the end. */
+  extra?: ReactNode;
 }) {
   const names = (kind: string) => project.fields.filter(f => f.kind === kind).map(f => f.name);
   const dates = names("date"), singles = names("single"), iterations = names("iteration");
@@ -93,6 +96,7 @@ export function Settings({ project, mapping, setMapping, resetMapping, prefs, se
           options={MONTHS.map((m, i) => [String(i + 1), i === 0 ? "January (calendar year)" : i === 9 ? "October (US federal)" : m] as [string, string])}
           hint="Changes the quarter labels on the timeline. Applies to every project." />
       </section>
+      {extra}
     </div>
   );
 }

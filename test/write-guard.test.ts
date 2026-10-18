@@ -32,4 +32,14 @@ describe("write guard", () => {
     expect(queried.sort()).toEqual(["ITEMS_BY_ID", "REPO_META"]);
     expect(Object.keys(ALL_MUTATIONS)).toHaveLength(17);
   });
+
+  it("files are written only by contents.ts, and only the history store uses it", () => {
+    const putters = src.filter(f => /rest(<[^>]*>)?\(\s*"PUT"/.test(f.text)).map(f => f.p.split("src/").pop());
+    expect(putters).toEqual(["github/contents.ts"]);
+    const importers = src.filter(f => /github\/contents"|from "\.\/contents"/.test(f.text)).map(f => f.p.split("src/").pop());
+    expect(importers).toEqual(["store/history.ts"]);
+    // REST writes are limited to the contents API.
+    const contents = src.find(f => f.p.endsWith("src/github/contents.ts"))!.text;
+    expect([...contents.matchAll(/rest(?:<[^>]*>)?\("(\w+)", `([^`]*)`/g)].every(m => m[2]!.includes("/contents/"))).toBe(true);
+  });
 });

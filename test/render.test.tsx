@@ -23,6 +23,9 @@ import { Confidence } from "../src/views/Confidence";
 import { Progress } from "../src/views/Progress";
 import { Schedule } from "../src/views/Schedule";
 import { Workload } from "../src/views/Workload";
+import { Changes } from "../src/views/Changes";
+import { HistorySettings } from "../src/views/HistorySettings";
+import type { HistoryState } from "../src/views/useHistory";
 
 const project = demoProject();
 const mapping = detectMapping(project);
@@ -143,5 +146,33 @@ describe("editing surfaces render", () => {
       go={noop} undo={noop} redo={noop} toggleGithubOnly={noop} onClose={noop} />);
     expect(html).toContain("Shift “Offline mode” +1 week");
     expect(html).toContain("Move “Offline mode” under an epic…");
+  });
+
+  const history: HistoryState = {
+    config: { mode: "local" }, setConfig: noop, baselines: [], changes: [
+      { version: 1, at: "2026-03-01T00:00:00.000Z", author: "me", scenario: "Default", steps: [{ label: "Moved Orbit", status: "applied", kind: "setDates", reason: "vendor late" }] },
+    ],
+    loading: false, error: null, author: "me", reload: noop,
+    saveBaseline: async () => {}, readBaseline: async () => { throw new Error("none"); }, saveChange: async () => {},
+  };
+  it("Changes", () => {
+    const html = renderToString(<Changes base={project} edited={project} mapping={mapping} history={history} compareId={null} onCompare={noop} settingsHref="#" />);
+    expect(html).toContain("What changed");
+    expect(html).toContain("me applied 1 change");
+    expect(html).toContain("vendor late");
+  });
+  it("History settings", () => {
+    const html = renderToString(<HistorySettings history={history} owner="o" number={1} repos={["o/r"]} canShare />);
+    expect(html).toContain(".pm-hub/o-1");
+  });
+  it("Gantt compares against a baseline", () => {
+    const schedule = buildSchedule(project, mapping);
+    const base = { version: 1 as const, name: "Old", savedAt: "2026-01-01T00:00:00.000Z", auto: false, project: { owner: "o", number: 1, title: "t" },
+      items: project.items.map(i => ({ key: i.key, title: i.title, parentKey: i.parentKey, epic: true, state: i.state, start: null,
+        end: schedule.bars.get(i.key) ? "2020-01-01" : null, release: null, lane: null, sub: null })) };
+    const html = renderToString(<Gantt project={project} mapping={mapping} draft={emptyDraft()} changed={0} prefs={defaultPrefs} setPrefs={noop}
+      baselines={[{ id: "x", name: "Old", savedAt: base.savedAt, auto: false }]} compare={{ id: "x", baseline: base }} onCompare={noop} />);
+    expect(html).toContain("basebar");
+    expect(html).toContain("Compare to");
   });
 });
