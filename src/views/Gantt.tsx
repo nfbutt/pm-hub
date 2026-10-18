@@ -7,6 +7,8 @@ import { buildSchedule, daysBetween, findConflicts, ganttRows, releaseColumns, t
 import { datesOp } from "../model/ops";
 import { addBlocker, moveToParent, newItem, setDatesWithDependents, setTitle } from "../model/edits";
 import type { Prefs } from "../store/cache";
+import { scopeAddedAfterStart, type Baseline } from "../model/diff";
+import type { BaselineMeta } from "../store/history";
 import { CopyBox } from "../ui/CopyBox";
 import { Modal } from "../ui/Drawer";
 import { ItemDrawer } from "./ItemDrawer";
@@ -28,9 +30,11 @@ interface Props {
   prefs: Prefs; setPrefs: (p: Prefs) => void;
   /** Multi-selection shared with the command menu. */
   selected?: Set<string>; onSelect?: (keys: Set<string>) => void;
+  /** Saved baselines, and the one drawn as ghost bars (if any). */
+  baselines?: BaselineMeta[]; compare?: { id: string; baseline: Baseline } | null; onCompare?: (id: string | null) => void;
 }
 
-export function Gantt({ project, mapping, draft, editor, changed, onDiscardAll, prefs, setPrefs, selected = new Set(), onSelect }: Props) {
+export function Gantt({ project, mapping, draft, editor, changed, onDiscardAll, prefs, setPrefs, selected = new Set(), onSelect, baselines = [], compare = null, onCompare }: Props) {
   const [renaming, setRenaming] = useState<{ key: string; text: string } | null>(null);
   const [addingTo, setAddingTo] = useState<{ key: string; text: string } | null>(null);
   const [link, setLink] = useState<{ from: string; x0: number; y0: number; x: number; y: number } | null>(null);
@@ -49,6 +53,8 @@ export function Gantt({ project, mapping, draft, editor, changed, onDiscardAll, 
   const schedule = useMemo(() => buildSchedule(project, mapping, effDraft), [project, mapping, effDraft]);
   const original = useMemo(() => buildSchedule(editor?.base ?? project, mapping), [editor?.base, project, mapping]);
   const conflicts = useMemo(() => findConflicts(schedule, effDraft), [schedule, effDraft]);
+  const scope = useMemo(() => scopeAddedAfterStart(editor?.base ?? project, mapping, original), [editor?.base, project, mapping, original]);
+  const then = useMemo(() => new Map((compare?.baseline.items ?? []).map(i => [i.key, i])), [compare]);
   const groups = useMemo(() => ganttRows(project, mapping, schedule, effDraft, { includeClosed: prefs.includeClosed, expanded }, original),
     [project, mapping, schedule, effDraft, prefs.includeClosed, expanded, original]);
   const releases = useMemo(() => releaseColumns(project, mapping, schedule).filter(r => r.due), [project, mapping, schedule]);
@@ -170,6 +176,15 @@ export function Gantt({ project, mapping, draft, editor, changed, onDiscardAll, 
             </select>
           </label>
         )}
+        {onCompare && (
+          <label className="check" title="Draw a saved baseline as outlines behind the bars">
+            Compare to
+            <select id="g-compare" className="mini-select" value={compare?.id ?? ""} onChange={e => onCompare(e.target.value || null)}>
+              <option value="">{baselines.length ? "nothing" : "no baselines saved"}</option>
+              {baselines.map(b => <option key={b.id} value={b.id}>{b.name} · {new Date(b.savedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}{b.auto ? " (auto)" : ""}</option>)}
+            </select>
+          </label>
+        )}
         {selected.size > 0 && <span className="pill accent">{selected.size} selected · <kbd>Ctrl K</kbd></span>}
         <span className="spacer" />
         {!editor && <span className="pill">Showing GitHub only</span>}
@@ -272,10 +287,29 @@ export function Gantt({ project, mapping, draft, editor, changed, onDiscardAll, 
                               onDoubleClick={() => { if (editor) setRenaming({ key: r.item.key, text: r.item.title }); }}>
                               <span className="etitle">{r.item.title}</span>
                               {r.item.number && <span className="enum">#{r.item.number}</span>}
+                              {r.depth === 0 && scope.get(r.item.key) && <span className="scopebadge" title="Stories created after this epic started">+{scope.get(r.item.key)} since start</span>}
                             </button>
                           )}
                         </div>
                         <div className="gt" style={{ width }}>
+                          {(() => {
+                            const b = then.get(r.item.key);
+                            if (!compare || !b?.end) return null;
+                            const start = b.start ?? b.end;
+                            if (r.bar && r.bar.start === start && r.bar.end === b.end) return null;
+                            const delta = r.bar ? daysBetween(b.end, r.bar.end) : 0;
+                            return (
+                              <>
+                                <div className="basebar" style={{ left: xOf(win.start, start, dayPx), width: (daysBetween(start, b.end) + 1) * dayPx }}
+                                  title={`In “${compare.baseline.name}”: ${short(start)} – ${short(b.end)}`} />
+                                {r.bar && delta !== 0 && (
+                                  <span className={`basedelta ${delta > 0 ? "late" : "early"}`} style={{ left: xOf(win.start, delta > 0 ? r.bar.end : b.end, dayPx) + dayPx + 4 }}>
+                                    {delta > 0 ? "+" : ""}{delta}d
+                                  </span>
+                                )}
+                              </>
+                            );
+                          })()}
                           {r.moved && r.original && (
                             <div className="ghostbar" style={{ left: xOf(win.start, r.original.start, dayPx), width: (daysBetween(r.original.start, r.original.end) + 1) * dayPx }} />
                           )}

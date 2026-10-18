@@ -137,3 +137,9 @@ query RepoMeta($owner: String!, $name: String!) {
 }`;
 
 export const ALL_DOCUMENTS = [VIEWER_PROJECTS, PROJECT_META, PROJECT_ITEMS, ITEMS_BY_ID, REPO_META];
+// VIEWER_LOGIN is declared below and added at the end of the file.
+
+/** Who is signed in, for attributing history records. */
+export const VIEWER_LOGIN = `
+query ViewerLogin { viewer { login } }`;
+ALL_DOCUMENTS.push(VIEWER_LOGIN);

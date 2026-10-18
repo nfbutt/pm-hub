@@ -66,7 +66,29 @@ export function createClient(token: string, fetchImpl: FetchLike = (i, o) => fet
   /** For mutations: any GraphQL error fails the call. */
   const mutate = <T>(document: string, variables: Record<string, unknown> = {}) => query<T>(document, variables, 0, true);
 
-  return { query, mutate, state };
+  /** REST calls to api.github.com (used for history files). Writes (PUT) only from contents.ts. */
+  async function rest<T>(method: "GET" | "PUT", path: string, body?: unknown): Promise<T> {
+    let res: Response;
+    try {
+      res = await fetchImpl(`https://api.github.com${path}`, {
+        method,
+        // GitHub sends max-age=60; revalidate so history written a moment ago shows up (a 304 is free).
+        cache: "no-cache",
+        headers: { Authorization: `bearer ${token}`, Accept: "application/vnd.github+json", ...(body ? { "Content-Type": "application/json" } : {}) },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+    } catch (e) {
+      throw new GitHubError("Couldn't reach GitHub. Check your connection and try again.", "network", e);
+    }
+    if (res.status === 401) throw new GitHubError("GitHub rejected this token. It may be expired or revoked.", "auth");
+    if (res.status === 404) throw new GitHubError("Not found, or this token can't see it.", "not-found");
+    const json = (await res.json().catch(() => ({}))) as T & { message?: string };
+    if (res.status === 403 || res.status === 429) throw new GitHubError(json.message ?? "GitHub refused the request.", /rate limit/i.test(json.message ?? "") ? "rate-limit" : "scope");
+    if (!res.ok) throw new GitHubError(json.message ?? `GitHub returned ${res.status}.`, "network");
+    return json;
+  }
+
+  return { query, mutate, rest, state };
 }
 
 export type GitHubClient = ReturnType<typeof createClient>;

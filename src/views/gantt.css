@@ -83,3 +83,10 @@
 .linkline { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 80; }
 .linkline line { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 4; }
 .mini-select { font: inherit; font-size: 12px; border: 1px solid var(--line); border-radius: 6px; padding: 3px 4px; background: var(--surface); color: var(--fg); margin-left: 4px; }
+
+/* baseline comparison */
+.basebar { position: absolute; top: 6px; height: calc(var(--rh) - 12px); border: 1.5px dashed var(--accent); background: color-mix(in srgb, var(--accent) 7%, transparent); border-radius: 6px; pointer-events: none; }
+.basedelta { position: absolute; top: calc(var(--rh) / 2 - 9px); font: 700 11px/18px var(--f-mono, monospace); padding: 0 5px; border-radius: 5px; pointer-events: none; z-index: 3; white-space: nowrap; }
+.basedelta.late { color: var(--bad); background: color-mix(in srgb, var(--bad) 12%, var(--surface)); }
+.basedelta.early { color: var(--good); background: color-mix(in srgb, var(--good) 12%, var(--surface)); }
+.scopebadge { flex: none; font-size: 10.5px; font-weight: 700; color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); border-radius: 5px; padding: 0 5px; margin-left: 6px; }

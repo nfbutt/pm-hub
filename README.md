@@ -45,6 +45,13 @@ Epics and stories change all the time: they get re-dated, re-scoped, split, move
 - **Review, then apply.** *Review* lists every change with before and after. pm-hub first re-reads the affected items: anything someone changed on GitHub in the meantime is flagged and left out unless you choose to overwrite it. When a target date moves more than three days you can say why, and the reason is posted as a comment on the issue. You can also post a project status update. Each change reports applied, failed or skipped; failures stay in your draft to retry, and *Prepare a revert* queues the exact undo.
 - Lane order and parking stay in pm-hub; GitHub has no place for them.
 
+### Plan history
+
+- **Baselines** are snapshots of the plan: each item's dates, epic, state, release and lane. Save one at any review ("Q1 plan"); pm-hub also saves one automatically right before every apply.
+- **What changed** compares today's plan (optionally with your unapplied changes) against any baseline: items added, removed, slipped or pulled in (with days), moved between epics, closed, renamed or re-released. It also lists the epics whose end date keeps moving across baselines, epics that gained stories after they started, and a feed of every apply with who did it, each change's result and the reasons given.
+- **Compare to** on the Gantt draws a baseline as dashed outlines behind the bars, labelled with how many days each item has slipped (+) or been pulled in (−). Epics that gained stories after starting carry a "+N since start" badge.
+- History is kept in your browser by default. **Settings → History** can share it instead through a repo you choose: pm-hub then writes small JSON files under `.pm-hub/<owner>-<project>/` (`baselines/` and `changes/`, plus a README). Files are only ever added, never edited, so two people can't overwrite each other. Saving history never blocks an apply; if it fails, the review screen says so.
+
 ## How the forecasts work
 
 - **Progress** compares the share of an epic's sub-issues that are closed with the share of its time window that has passed. More than 10 points behind the clock is *Behind*; more than 25 is *At risk*.
@@ -60,7 +67,7 @@ Epics and stories change all the time: they get re-dated, re-scoped, split, move
 - The token is sent **only** to `api.github.com`, in a request header. A Content-Security-Policy in the built page blocks every other destination except Google Fonts.
 - By default the token is kept in `sessionStorage` and forgotten when you close the tab. "Remember on this device" keeps it in `localStorage`.
 - Project data is cached in your browser's IndexedDB so the next visit is instant. There is no server, no database and no analytics.
-- pm-hub writes to GitHub **only** when you press Apply on the review screen. Every write lives in `src/github/mutations.ts` and is sent only by `src/github/apply.ts`; `test/write-guard.test.ts` enforces both.
+- pm-hub writes to GitHub **only** when you press Apply on the review screen, or save history to a repo you chose. Every project and issue write lives in `src/github/mutations.ts` and is sent only by `src/github/apply.ts`; history files are written only by `src/github/contents.ts`, through the contents API. `test/write-guard.test.ts` enforces all three.
 - Loading a project costs about 35 GraphQL points per 100 items, out of GitHub's 5,000 per hour. A warning appears when fewer than 500 remain.
 
 ## Develop
@@ -91,7 +98,9 @@ Tests, screenshots and the demo use synthetic data only. Never commit real proje
 ```
 src/github/   GraphQL client, queries, loader, mutations and the apply engine
 src/model/    pure logic: normalize, mapping, schedule, health, forecast, deps,
-              ops (the change list), edits (intentions to ops), scenarios
+              ops (the change list), edits (intentions to ops), scenarios,
+              diff (baselines, churn)
+src/store/    browser cache, preferences, plan history (local or in a repo)
 src/views/    one component per view
 src/ui/       design tokens, shell, drawer, SVG charts
 src/demo/     synthetic fixture used by tests and demo mode

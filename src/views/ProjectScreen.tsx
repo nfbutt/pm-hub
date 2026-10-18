@@ -21,6 +21,10 @@ import { Schedule } from "./Schedule";
 import { Workload } from "./Workload";
 import { Releases } from "./Releases";
 import { Settings } from "./Settings";
+import { Changes } from "./Changes";
+import { HistorySettings } from "./HistorySettings";
+import { useHistory } from "./useHistory";
+import type { Baseline } from "../model/diff";
 import { useChangeSet } from "./useChangeSet";
 import { useProject, type Source } from "./useProject";
 
@@ -36,6 +40,7 @@ const TABS: { id: ViewId; label: string }[] = [
   { id: "burnup", label: "Burn-up" },
   { id: "confidence", label: "Release confidence" },
   { id: "dependencies", label: "Dependencies" },
+  { id: "changes", label: "What changed" },
   { id: "settings", label: "Settings" },
 ];
 
@@ -49,6 +54,13 @@ export function ProjectScreen({ source, view, onSignOut }: { source: Source; vie
   const [githubOnly, setGithubOnly] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [menuOpen, setMenuOpen] = useState(false);
+  const history = useHistory(owner, number, source.kind === "github" ? source.client : null);
+  const [compare, setCompare] = useState<{ id: string; baseline: Baseline } | null>(null);
+  const compareTo = (id: string | null, b?: Baseline | null) => {
+    if (!id) { setCompare(null); return; }
+    if (b) { setCompare({ id, baseline: b }); return; }
+    history.readBaseline(id).then(baseline => setCompare({ id, baseline }), () => setCompare(null));
+  };
   // Views see the project as edited, unless "GitHub only" is on. Editing waits until saved changes have loaded.
   const shown = !githubOnly && cs.applied ? cs.applied.project : project;
   const draft = !githubOnly && cs.applied ? cs.applied.local : emptyDraft();
@@ -136,7 +148,8 @@ export function ProjectScreen({ source, view, onSignOut }: { source: Source; vie
         {shown && mapping && (
           <>
             {active === "overview" && <Overview project={shown} mapping={mapping} />}
-            {active === "gantt" && <Gantt project={shown} mapping={mapping} draft={draft} editor={editor} changed={githubOnly ? 0 : cs.net.length} onDiscardAll={editor ? cs.clear : undefined} prefs={prefs} setPrefs={setPrefs} selected={selected} onSelect={setSelected} />}
+            {active === "gantt" && <Gantt project={shown} mapping={mapping} draft={draft} editor={editor} changed={githubOnly ? 0 : cs.net.length} onDiscardAll={editor ? cs.clear : undefined} prefs={prefs} setPrefs={setPrefs} selected={selected} onSelect={setSelected}
+              baselines={history.baselines} compare={compare} onCompare={id => compareTo(id)} />}
             {active === "plan" && <Plan project={shown} mapping={mapping} draft={draft} editor={editor} selected={selected} onSelect={setSelected} />}
             {active === "releases" && <Releases project={shown} mapping={mapping} draft={draft} />}
             {active === "schedule" && <Schedule project={shown} mapping={mapping} draft={draft} />}
@@ -145,12 +158,19 @@ export function ProjectScreen({ source, view, onSignOut }: { source: Source; vie
             {active === "burnup" && <BurnUp project={shown} mapping={mapping} />}
             {active === "confidence" && <Confidence project={shown} mapping={mapping} />}
             {active === "dependencies" && <Dependencies project={shown} mapping={mapping} draft={draft} />}
+            {active === "changes" && project && (
+              <Changes base={project} edited={shown} mapping={mapping} history={history} compareId={compare?.id ?? null}
+                onCompare={(id, b) => { compareTo(id, b); if (id) location.hash = hrefFor(routeFor("gantt")); }} settingsHref={hrefFor(routeFor("settings"))} />
+            )}
             {active === "review" && project && cs.editor && (
               <Review key={cs.scenarios.active} base={project} net={cs.net} titleOf={cs.editor.titleOf} client={source.kind === "github" ? source.client : null}
                 onApplied={slots => cs.removeSlots(slots)} onRecord={(label, ops) => cs.editor!.record(label, ops)} refresh={state.refresh}
+                mapping={mapping} history={history} scenario={cs.scenarios.list.find(s => s.id === cs.scenarios.active)?.name ?? "Default"}
                 goBack={() => { location.hash = hrefFor(routeFor("gantt")); }} />
             )}
-            {active === "settings" && project && <Settings project={project} mapping={mapping} setMapping={state.setMapping} resetMapping={state.resetMapping} prefs={prefs} setPrefs={setPrefs} />}
+            {active === "settings" && project && <Settings project={project} mapping={mapping} setMapping={state.setMapping} resetMapping={state.resetMapping} prefs={prefs} setPrefs={setPrefs}
+              extra={<HistorySettings history={history} owner={owner} number={number} canShare={source.kind === "github"}
+                repos={[...new Set(project.items.map(i => i.repo).filter((r): r is string => !!r))].sort()} />} />}
           </>
         )}
         <UndoToast action={cs.lastAction} onUndo={cs.undo} canUndo={cs.canUndo && !githubOnly} />
