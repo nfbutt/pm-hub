@@ -4,9 +4,9 @@ import type { Project } from "../model/normalize";
 import { applyOps, describe, netOps, type Applied, type Op } from "../model/ops";
 import {
   activeOps, activeScenario, addScenario, canRedo, canUndo, clearActive, discardItem, emptyStore, migrateLegacyDraft,
-  record, redo, removeScenario, renameScenario, switchScenario, undo, type ScenarioStore,
+  record, redo, removeScenario, removeSlots, renameScenario, switchScenario, undo, type ScenarioStore,
 } from "../model/scenarios";
-import { deleteLegacyDraft, readChanges, readDraft, writeChanges } from "../store/cache";
+import { deleteLegacyDraft, readChanges, readDraft, UNAVAILABLE, writeChanges } from "../store/cache";
 
 /** What views get to make edits. Every edit is a recorded op; nothing is written to GitHub here. */
 export interface Editor {
@@ -21,6 +21,8 @@ export interface Editor {
 
 export interface ChangeSetState {
   ready: boolean;
+  /** False when browser storage didn't answer: edits still work but won't survive closing the tab. */
+  persistent: boolean;
   store: ScenarioStore;
   applied: Applied | null;
   /** Net changes after folding repeated edits. */
@@ -28,6 +30,8 @@ export interface ChangeSetState {
   editor: Editor | null;
   undo: () => void; redo: () => void; canUndo: boolean; canRedo: boolean;
   clear: () => void;
+  /** After an apply: drops changes to these slots from the active scenario. */
+  removeSlots: (slots: Set<string>) => void;
   scenarios: {
     list: { id: string; name: string; count: number }[];
     active: string;
@@ -42,6 +46,8 @@ export function useChangeSet(owner: string, number: number, base: Project | null
   const [ready, setReady] = useState(false);
   const [lastAction, setLastAction] = useState<{ label: string; at: number } | null>(null);
   const loaded = useRef(false);
+  const persist = useRef(true);
+  const [persistent, setPersistent] = useState(true);
 
   // Load once the project is known, migrating a v1 draft the first time.
   useEffect(() => {
@@ -49,6 +55,7 @@ export function useChangeSet(owner: string, number: number, base: Project | null
     loaded.current = true;
     (async () => {
       const saved = await readChanges(owner, number);
+      if (saved === UNAVAILABLE) { persist.current = false; setPersistent(false); setReady(true); return; }
       if (saved) { setStore(saved); setReady(true); return; }
       const legacy = await readDraft(owner, number);
       if (legacy && (Object.keys(legacy.bars).length || legacy.parked.length || Object.keys(legacy.order).length)) {
@@ -62,7 +69,7 @@ export function useChangeSet(owner: string, number: number, base: Project | null
   }, [owner, number, base, mapping]);
 
   const update = useCallback((f: (s: ScenarioStore) => ScenarioStore) => {
-    setStore(prev => { const next = f(prev); if (next !== prev) void writeChanges(owner, number, next); return next; });
+    setStore(prev => { const next = f(prev); if (next !== prev && persist.current) void writeChanges(owner, number, next); return next; });
   }, [owner, number]);
 
   const scenario = activeScenario(store);
@@ -80,11 +87,12 @@ export function useChangeSet(owner: string, number: number, base: Project | null
   } : null), [base, update, titleOf]);
 
   return {
-    ready, store, applied, net, editor,
+    ready, persistent, store, applied, net, editor,
     undo: () => { if (canUndo(store)) { const c = scenario.changes[scenario.cursor - 1]; update(undo); setLastAction(c ? { label: `Undid: ${c.label}`, at: Date.now() } : null); } },
     redo: () => { if (canRedo(store)) { const c = scenario.changes[scenario.cursor]; update(redo); setLastAction(c ? { label: `Redid: ${c.label}`, at: Date.now() } : null); } },
     canUndo: canUndo(store), canRedo: canRedo(store),
     clear: () => update(clearActive),
+    removeSlots: slots => update(s => removeSlots(s, slots)),
     scenarios: {
       list: store.scenarios.map(s => ({ id: s.id, name: s.name, count: netOps(activeOps(s)).length })),
       active: store.active,

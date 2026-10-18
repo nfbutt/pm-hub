@@ -20,7 +20,8 @@ export type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
 export function createClient(token: string, fetchImpl: FetchLike = (i, o) => fetch(i, o)) {
   const state: ClientState = { scopes: null, rateLimit: null };
 
-  async function query<T>(document: string, variables: Record<string, unknown> = {}, attempt = 0): Promise<T> {
+  /** Reads accept partial data (e.g. one org hidden); writes go through mutate(), which doesn't. */
+  async function query<T>(document: string, variables: Record<string, unknown> = {}, attempt = 0, strict = false): Promise<T> {
     let res: Response;
     try {
       res = await fetchImpl(GRAPHQL_URL, {
@@ -40,7 +41,7 @@ export function createClient(token: string, fetchImpl: FetchLike = (i, o) => fet
       const retryAfter = Number(res.headers.get("retry-after") ?? 0);
       if (retryAfter > 0 && retryAfter <= 60 && attempt < 2) {
         await new Promise(r => setTimeout(r, retryAfter * 1000));
-        return query<T>(document, variables, attempt + 1);
+        return query<T>(document, variables, attempt + 1, strict);
       }
       throw new GitHubError("GitHub's rate limit was reached. Wait a few minutes, then refresh.", "rate-limit");
     }
@@ -54,19 +55,32 @@ export function createClient(token: string, fetchImpl: FetchLike = (i, o) => fet
         throw new GitHubError(`This token is missing a scope GitHub needs: ${first.message}`, "scope", body.errors);
       }
       if (first.type === "NOT_FOUND") throw new GitHubError("That project wasn't found, or this token can't see it.", "not-found", body.errors);
-      // Partial data with errors (e.g. one inaccessible org) is still usable.
-      if (!body.data) throw new GitHubError(first.message, "graphql", body.errors);
+      // Partial data with errors (e.g. one inaccessible org) is still usable for reads,
+      // never for writes: a rejected mutation can come back as partial data.
+      if (!body.data || strict) throw new GitHubError(first.message, "graphql", body.errors);
     }
     if (!body.data) throw new GitHubError("GitHub returned an empty response.", "graphql");
     return body.data;
   }
 
-  return { query, state };
+  /** For mutations: any GraphQL error fails the call. */
+  const mutate = <T>(document: string, variables: Record<string, unknown> = {}) => query<T>(document, variables, 0, true);
+
+  return { query, mutate, state };
 }
 
 export type GitHubClient = ReturnType<typeof createClient>;
 
 export const REQUIRED_SCOPES = ["read:project", "repo"] as const;
+
+/**
+ * Whether a token can apply changes. Classic tokens report scopes; fine-grained tokens
+ * don't, so the answer is "unknown" and GitHub's response is the judge.
+ */
+export function writeAccess(scopes: string[] | null): "yes" | "no" | "unknown" {
+  if (scopes === null) return "unknown";
+  return scopes.includes("project") && (scopes.includes("repo") || scopes.includes("public_repo")) ? "yes" : "no";
+}
 
 /** Classic tokens report scopes; fine-grained tokens don't send the header (scopes = null). */
 export function missingScopes(scopes: string[] | null): string[] {

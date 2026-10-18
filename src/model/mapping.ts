@@ -73,7 +73,10 @@ export function detectMapping(p: Project): Mapping {
     : { kind: "none" };
 
   const statusField = singles.find(f => /^status$/i.test(f.name))?.name ?? singles.find(f => /status|state|stage/i.test(f.name))?.name ?? null;
-  const prioField = singles.find(f => /priority/i.test(f.name) && usage(p, f.name) > 0);
+  // A Priority field counts even before anyone has set it, so a fresh project can still be
+  // prioritised from pm-hub; one that is already in use wins if there are several.
+  const prioFields = singles.filter(f => /priority/i.test(f.name));
+  const prioField = prioFields.find(f => usage(p, f.name) > 0) ?? prioFields[0];
   const priority: Mapping["priority"] = prioField ? { kind: "field", field: prioField.name }
     : prefixes.has("priority") ? { kind: "labelPrefix", prefix: "priority" } : { kind: "none" };
 

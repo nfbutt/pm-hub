@@ -4,7 +4,7 @@ import { loadViewerProjects } from "../github/load";
 import { saveToken } from "../store/token";
 import { TopBar } from "../ui/TopBar";
 
-const NEW_TOKEN_URL = "https://github.com/settings/tokens/new?scopes=read:project,repo,read:org&description=pm-hub";
+const NEW_TOKEN_URL = "https://github.com/settings/tokens/new?scopes=project,repo,read:org&description=pm-hub";
 
 export function Connect({ onConnected }: { onConnected: (token: string) => void }) {
   const [token, setToken] = useState("");
@@ -73,8 +73,9 @@ export function Connect({ onConnected }: { onConnected: (token: string) => void 
         <section className="card pad" style={{ display: "grid", gap: 8 }}>
           <h2 style={{ fontSize: 15, fontWeight: 800 }}>Which token?</h2>
           <p>
-            Use a <b>classic</b> token with <code>read:project</code> and <code>repo</code> (add <code>read:org</code> for organization
-            projects). The link above pre-selects those scopes. pm-hub v1 only reads; it never changes your project.
+            Use a <b>classic</b> token with <code>project</code> and <code>repo</code> (add <code>read:org</code> for organization
+            projects). The link above pre-selects those scopes. pm-hub only writes to GitHub when you review your changes and press Apply.
+            A token with just <code>read:project</code> works too: you can plan freely, but not apply.
           </p>
           <p className="muted">
             If you only work with public repositories, <code>public_repo</code> can replace <code>repo</code>.

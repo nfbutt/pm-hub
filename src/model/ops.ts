@@ -242,3 +242,14 @@ export function describe(op: Op, titleOf: (key: string) => string): string {
     case "reorder": return `Reordered ${op.lane}`;
   }
 }
+
+/** Rewrites item keys in an op (e.g. a draft key "new:x" to the created "owner/repo#12"). */
+export function remapKeys(op: Op, map: Map<string, string>): Op {
+  const k = (key: string) => map.get(key) ?? key;
+  const out = { ...op } as Op & { key?: string };
+  if ("key" in op) (out as { key: string }).key = k(op.key);
+  if (op.kind === "setParent") return { ...(out as typeof op), before: op.before && k(op.before), after: op.after && k(op.after) };
+  if (op.kind === "addBlockedBy" || op.kind === "removeBlockedBy") return { ...(out as typeof op), blocker: k(op.blocker) };
+  if (op.kind === "reorder") return { ...op, before: op.before.map(k), after: op.after.map(k) };
+  return out as Op;
+}

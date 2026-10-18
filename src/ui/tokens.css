@@ -271,7 +271,8 @@ kbd { font-family: var(--f-mono); font-size: 10.5px; padding: 0 4px; border-radi
 .changebar select { font: inherit; font-size: 12px; border: 1px solid var(--line); border-radius: 7px; padding: 4px 6px; background: var(--surface); color: var(--fg); max-width: 170px; }
 .changebar .iconbtn { border: 1px solid var(--line); background: var(--surface); border-radius: 7px; padding: 3px 8px; font-size: 14px; line-height: 1.2; }
 .changebar .iconbtn:disabled { opacity: .4; cursor: default; }
-.pill.count { background: var(--accent); color: var(--on-accent); }
+.pill.count { background: var(--accent); color: var(--on-accent); text-decoration: none; }
+.pill.count:hover { filter: brightness(1.1); }
 
 /* pickers */
 .picklist { display: grid; gap: 6px; min-width: 240px; }
@@ -331,3 +332,16 @@ table.plan .pickbtn .pb-value:hover { border-color: var(--line); }
 .cmdk { background: var(--surface); border-radius: 12px; width: min(620px, 100%); padding: 12px; display: grid; gap: 8px; box-shadow: var(--shadow); border: 1px solid var(--line); }
 .cmdk-head { display: flex; gap: 8px; align-items: center; font-size: 13px; min-height: 22px; }
 .cmdk .picklist ul { max-height: 50vh; }
+
+/* review */
+.review { overflow: hidden; }
+.rv-group { padding: 12px 16px; border-bottom: 1px solid var(--line-soft); display: grid; gap: 6px; }
+.rv-group:last-child { border-bottom: 0; }
+.rv-group h3 { font-size: 13px; font-weight: 800; }
+.rv-step { display: grid; grid-template-columns: 20px 1fr auto; gap: 10px; align-items: start; font-size: 13px; }
+.rv-step.off .rv-body > span:first-child { color: var(--muted); text-decoration: line-through; }
+.rv-body { display: grid; gap: 4px; min-width: 0; }
+.rv-note { font-size: 12px; color: var(--muted); }
+.rv-note.bad { color: var(--bad); }
+.rv-reason { font-family: var(--f-body); font-size: 12.5px; padding: 6px 8px; }
+pre.dry { font-family: var(--f-mono); font-size: 11.5px; background: var(--surface-2); padding: 10px; border-radius: 8px; overflow: auto; max-height: 50vh; white-space: pre-wrap; word-break: break-all; }
