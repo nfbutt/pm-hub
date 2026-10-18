@@ -5,6 +5,8 @@ const renderToString = (el: ReactElement) => rawRender(el).replace(/<!-- -->/g, 
 import { describe, expect, it } from "vitest";
 import { detectMapping } from "../src/model/mapping";
 import { emptyDraft } from "../src/model/schedule";
+import { applyOps, datesOp } from "../src/model/ops";
+import type { Editor } from "../src/views/useChangeSet";
 import { defaultPrefs } from "../src/store/cache";
 import { demoProject } from "../src/views/useProject";
 import { Gantt } from "../src/views/Gantt";
@@ -31,7 +33,7 @@ describe("views render with the demo project", () => {
 
   for (const zoom of ["week", "month", "quarter"] as const) {
     it(`Gantt at ${zoom} zoom`, () => {
-      const html = renderToString(<Gantt project={project} mapping={mapping} draft={emptyDraft()} setDraft={noop} resetDraft={noop} changed={0}
+      const html = renderToString(<Gantt project={project} mapping={mapping} draft={emptyDraft()} changed={0}
         prefs={{ ...defaultPrefs, zoom }} setPrefs={noop} />);
       expect(html).toContain("Usage-based pricing engine");
       expect(html).toContain("class=\"bar");
@@ -39,12 +41,21 @@ describe("views render with the demo project", () => {
     });
   }
 
-  it("Gantt with a draft shows the ghost bar and the change count", () => {
+  it("Gantt with an edit shows where GitHub has the bar and the change count", () => {
     const epic = project.items.find(i => i.title === "Offline mode")!;
-    const html = renderToString(<Gantt project={project} mapping={mapping} draft={{ ...emptyDraft(), bars: { [epic.key]: { start: "2027-03-01", end: "2027-04-30" } } }}
-      setDraft={noop} resetDraft={noop} changed={1} prefs={defaultPrefs} setPrefs={noop} />);
+    const { project: edited, local } = applyOps(project, [datesOp(epic, mapping, "2027-03-01", "2027-04-30")]);
+    const editor: Editor = { base: project, record: noop, discard: noop, titleOf: k => k };
+    const html = renderToString(<Gantt project={edited} mapping={mapping} draft={local} editor={editor} changed={1} onDiscardAll={noop}
+      prefs={defaultPrefs} setPrefs={noop} />);
     expect(html).toContain("class=\"ghostbar\"");
-    expect(html).toContain("Draft: 1 change");
+    expect(html).toContain("1 change, not on GitHub yet");
+    expect(html).toContain("Discard changes");
+  });
+
+  it("Gantt without an editor is read-only", () => {
+    const html = renderToString(<Gantt project={project} mapping={mapping} draft={emptyDraft()} changed={0} prefs={defaultPrefs} setPrefs={noop} />);
+    expect(html).toContain("Showing GitHub only");
+    expect(html).not.toContain("Discard changes");
   });
 
   it("Releases", () => {

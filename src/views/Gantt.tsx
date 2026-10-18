@@ -4,10 +4,12 @@ import { addDays, priorityOf, type Mapping } from "../model/mapping";
 import type { Item, Project } from "../model/normalize";
 import { rowsToCsv, rowsToMarkdown } from "../model/export";
 import { buildSchedule, daysBetween, findConflicts, ganttRows, releaseColumns, timeWindow, type Draft, type Row } from "../model/schedule";
+import { datesOp } from "../model/ops";
 import type { Prefs } from "../store/cache";
 import { CopyBox } from "../ui/CopyBox";
 import { Modal } from "../ui/Drawer";
 import { ItemDrawer } from "./ItemDrawer";
+import type { Editor } from "./useChangeSet";
 import "./gantt.css";
 
 const LANE_COLORS = ["var(--lane-1)", "var(--lane-2)", "var(--lane-3)", "var(--lane-4)"];
@@ -15,12 +17,17 @@ const today = () => new Date().toISOString().slice(0, 10);
 const short = (d: string) => new Date(d + "T00:00:00Z").toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
 
 interface Props {
+  /** The project as edited (or as GitHub has it when there's no editor). */
   project: Project; mapping: Mapping;
-  draft: Draft; setDraft: (u: (d: Draft) => Draft) => void; resetDraft: () => void; changed: number;
+  /** Local-only overlay: parked items, lane order, dates with no field to live in. */
+  draft: Draft;
+  /** Absent in "GitHub only" mode: the chart is then read-only. */
+  editor?: Editor;
+  changed: number; onDiscardAll?: () => void;
   prefs: Prefs; setPrefs: (p: Prefs) => void;
 }
 
-export function Gantt({ project, mapping, draft, setDraft, resetDraft, changed, prefs, setPrefs }: Props) {
+export function Gantt({ project, mapping, draft, editor, changed, onDiscardAll, prefs, setPrefs }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [open, setOpen] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -34,10 +41,10 @@ export function Gantt({ project, mapping, draft, setDraft, resetDraft, changed, 
   const dayPx = DAY_PX[zoom];
   const effDraft = useMemo(() => live ? { ...draft, bars: { ...draft.bars, [live.key]: { start: live.start, end: live.end } } } : draft, [draft, live]);
   const schedule = useMemo(() => buildSchedule(project, mapping, effDraft), [project, mapping, effDraft]);
-  const original = useMemo(() => buildSchedule(project, mapping), [project, mapping]);
+  const original = useMemo(() => buildSchedule(editor?.base ?? project, mapping), [editor?.base, project, mapping]);
   const conflicts = useMemo(() => findConflicts(schedule, effDraft), [schedule, effDraft]);
-  const groups = useMemo(() => ganttRows(project, mapping, schedule, effDraft, { includeClosed: prefs.includeClosed, expanded }),
-    [project, mapping, schedule, effDraft, prefs.includeClosed, expanded]);
+  const groups = useMemo(() => ganttRows(project, mapping, schedule, effDraft, { includeClosed: prefs.includeClosed, expanded }, original),
+    [project, mapping, schedule, effDraft, prefs.includeClosed, expanded, original]);
   const releases = useMemo(() => releaseColumns(project, mapping, schedule).filter(r => r.due), [project, mapping, schedule]);
   const visibleBars = groups.flatMap(g => g.rows.map(r => r.bar).filter((b): b is NonNullable<typeof b> => !!b));
   // Keep the window stable while dragging so the chart doesn't jump.
@@ -67,6 +74,7 @@ export function Gantt({ project, mapping, draft, setDraft, resetDraft, changed, 
 
   // ----- bar drag -----
   function onBarDown(e: RPointerEvent, row: Row) {
+    if (!editor) { setOpen(row.item.key); return; }
     if (!row.bar || e.button !== 0) return;
     const mode = (e.target as HTMLElement).dataset.h === "l" ? "l" : (e.target as HTMLElement).dataset.h === "r" ? "r" : "move";
     drag.current = { key: row.item.key, mode, x0: e.clientX, start: row.bar.start, end: row.bar.end, moved: false };
@@ -88,7 +96,8 @@ export function Gantt({ project, mapping, draft, setDraft, resetDraft, changed, 
   function onBarUp() {
     const d = drag.current; drag.current = null;
     if (!d) return;
-    if (d.moved && live) setDraft(x => ({ ...x, bars: { ...x.bars, [live.key]: { start: live.start, end: live.end } } }));
+    const item = schedule.byKey.get(d.key);
+    if (d.moved && live && item && editor) editor.record(`Moved ${item.title} to ${short(live.start)} – ${short(live.end)}`, [datesOp(item, mapping, live.start, live.end)]);
     else setOpen(d.key);
     setLive(null);
   }
@@ -99,14 +108,16 @@ export function Gantt({ project, mapping, draft, setDraft, resetDraft, changed, 
     const g = groups.find(g => g.rows.some(r => r.item.key === key && r.depth === 0)); if (!g) return;
     const order = laneOrder(g.lane), i = order.indexOf(key), j = i + dir;
     if (i < 0 || j < 0 || j >= order.length) return;
+    const before = [...order];
     [order[i], order[j]] = [order[j]!, order[i]!];
-    setDraft(d => ({ ...d, order: { ...d.order, [g.lane]: order } }));
+    editor?.record(`Reordered ${g.lane}`, [{ kind: "reorder", lane: g.lane, before, after: order }]);
   }
   function dropRow(targetKey: string, lane: string, above: boolean) {
     if (!rowDrag || rowDrag.lane !== lane || rowDrag.key === targetKey) return;
-    const order = laneOrder(lane).filter(k => k !== rowDrag.key);
+    const before = laneOrder(lane);
+    const order = before.filter(k => k !== rowDrag.key);
     order.splice(order.indexOf(targetKey) + (above ? 0 : 1), 0, rowDrag.key);
-    setDraft(d => ({ ...d, order: { ...d.order, [lane]: order } }));
+    editor?.record(`Reordered ${lane}`, [{ kind: "reorder", lane, before, after: order }]);
   }
 
   const openItem = open ? schedule.byKey.get(open) : null;
@@ -125,16 +136,17 @@ export function Gantt({ project, mapping, draft, setDraft, resetDraft, changed, 
           {expanded.size ? "Collapse all" : "Expand all"}
         </button>
         <span className="spacer" />
-        {changed > 0 && <span className="pill warn">Draft: {changed} change{changed > 1 ? "s" : ""}, not on GitHub</span>}
+        {!editor && <span className="pill">Showing GitHub only</span>}
+        {editor && changed > 0 && <span className="pill warn">{changed} change{changed > 1 ? "s" : ""}, not on GitHub yet</span>}
         {conflicts.length > 0 ? <span className="pill bad">{conflicts.length} conflict{conflicts.length > 1 ? "s" : ""}</span> : <span className="pill good">No conflicts</span>}
-        <button className="btn" disabled={!changed} onClick={() => setConfirmReset(true)}>Reset draft</button>
+        {onDiscardAll && <button className="btn" disabled={!changed} onClick={() => setConfirmReset(true)}>Discard changes</button>}
         <button className="btn primary" onClick={() => setExporting(true)}>Export</button>
       </div>
 
       {confirmReset && (
         <div className="callout warn" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          <span>Discard every draft change and go back to the dates on GitHub?</span>
-          <button className="btn" onClick={() => { resetDraft(); setConfirmReset(false); }}>Discard draft</button>
+          <span>Discard every change in this scenario and go back to what GitHub has?</span>
+          <button className="btn" onClick={() => { onDiscardAll?.(); setConfirmReset(false); }}>Discard changes</button>
           <button className="btn" onClick={() => setConfirmReset(false)}>Keep it</button>
         </div>
       )}
@@ -193,7 +205,7 @@ export function Gantt({ project, mapping, draft, setDraft, resetDraft, changed, 
                         onDrop={e => { e.preventDefault(); if (dropAt) dropRow(r.item.key, g.lane, dropAt.above); setRowDrag(null); setDropAt(null); }}>
                         <div className="gl">
                           {r.depth === 0 ? (
-                            <button className="grip" draggable aria-label={`Reorder ${r.item.title}`} title="Drag to reorder"
+                            <button className="grip" draggable={!!editor} disabled={!editor} aria-label={`Reorder ${r.item.title}`} title="Drag to reorder"
                               onDragStart={e => { setRowDrag({ key: r.item.key, lane: g.lane }); e.dataTransfer.effectAllowed = "move"; }}
                               onDragEnd={() => { setRowDrag(null); setDropAt(null); }}>⋮⋮</button>
                           ) : <span />}
@@ -241,14 +253,14 @@ export function Gantt({ project, mapping, draft, setDraft, resetDraft, changed, 
                 <span className="eyebrow">No dates ({undated.length})</span>
                 <div className="chips">{undated.map(i => (
                   <span key={i.key} className="chip"><button className="linkish" onClick={() => setOpen(i.key)}>{i.title}</button>
-                    <button onClick={() => setDraft(d => ({ ...d, bars: { ...d.bars, [i.key]: { start: today(), end: addDays(today(), 27) } } }))}>Place</button></span>
+                    {editor && <button onClick={() => editor.record(`Placed ${i.title} on the chart`, [datesOp(i, mapping, today(), addDays(today(), 27))])}>Place</button>}</span>
                 ))}</div>
               </>}
               {parkedItems.length > 0 && <>
                 <span className="eyebrow">Parked ({parkedItems.length})</span>
                 <div className="chips">{parkedItems.map(i => (
                   <span key={i.key} className="chip"><button className="linkish" onClick={() => setOpen(i.key)}>{i.title}</button>
-                    <button onClick={() => setDraft(d => ({ ...d, parked: d.parked.filter(k => k !== i.key) }))}>Put back</button></span>
+                    {editor && <button onClick={() => editor.record(`Put ${i.title} back on the chart`, [{ kind: "park", key: i.key, before: true, after: false }])}>Put back</button>}</span>
                 ))}</div>
               </>}
             </div>
@@ -258,11 +270,11 @@ export function Gantt({ project, mapping, draft, setDraft, resetDraft, changed, 
 
       {openItem && (
         <ItemDrawer item={openItem} mapping={mapping} schedule={schedule} original={original} draft={draft} conflicts={conflicts}
-          onClose={() => setOpen(null)} onDraft={setDraft} onMove={dir => moveRow(openItem.key, dir)} />
+          onClose={() => setOpen(null)} editor={editor} onMove={dir => moveRow(openItem.key, dir)} />
       )}
       {exporting && (
         <Modal title="Export this arrangement" onClose={() => setExporting(false)}>
-          <p className="muted">Includes your draft changes. Nothing is sent to GitHub.</p>
+          <p className="muted">Includes your unsaved changes. Nothing is sent to GitHub.</p>
           <CopyBox id="x-csv" label="CSV" text={rowsToCsv(groups)} />
           <CopyBox id="x-md" label="Markdown" text={rowsToMarkdown(groups)} />
         </Modal>

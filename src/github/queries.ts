@@ -24,7 +24,8 @@ query ViewerProjects {
   rateLimit { remaining limit resetAt cost }
 }`;
 
-const FIELD_REF = `field { ... on ProjectV2FieldCommon { name } }`;
+// Field ids come back too, so edits can target a field even if it is renamed.
+const FIELD_REF = `field { ... on ProjectV2FieldCommon { id name } }`;
 
 export const PROJECT_META = `
 query ProjectMeta($owner: String!, $number: Int!) {
@@ -78,26 +79,26 @@ query ProjectItems($owner: String!, $number: Int!, $after: String) {
             content {
               __typename
               ... on Issue {
-                number title url state stateReason createdAt closedAt updatedAt
-                repository { nameWithOwner }
-                labels(first: 30) { nodes { name color } }
-                assignees(first: 10) { nodes { login avatarUrl } }
-                milestone { title number dueOn state }
+                id number title url state stateReason createdAt closedAt updatedAt
+                repository { id nameWithOwner }
+                labels(first: 30) { nodes { id name color } }
+                assignees(first: 10) { nodes { id login avatarUrl } }
+                milestone { id title number dueOn state }
                 issueType { name }
-                parent { number repository { nameWithOwner } }
+                parent { id number repository { nameWithOwner } }
                 subIssuesSummary { total completed }
-                blockedBy(first: 25) { nodes { number state repository { nameWithOwner } } }
+                blockedBy(first: 25) { nodes { id number state repository { nameWithOwner } } }
               }
               ... on PullRequest {
-                number title url state createdAt closedAt updatedAt
-                repository { nameWithOwner }
-                labels(first: 30) { nodes { name color } }
-                assignees(first: 10) { nodes { login avatarUrl } }
-                milestone { title number dueOn state }
+                id number title url state createdAt closedAt updatedAt
+                repository { id nameWithOwner }
+                labels(first: 30) { nodes { id name color } }
+                assignees(first: 10) { nodes { id login avatarUrl } }
+                milestone { id title number dueOn state }
               }
               ... on DraftIssue {
-                title createdAt updatedAt
-                assignees(first: 10) { nodes { login avatarUrl } }
+                id title createdAt updatedAt
+                assignees(first: 10) { nodes { id login avatarUrl } }
               }
             }
           }

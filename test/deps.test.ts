@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { makeFixture, DEMO_OWNER } from "../src/demo/fixture";
 import { buildGraph, criticalPath, findCycles, remainingDays, type Graph } from "../src/model/deps";
 import { detectMapping } from "../src/model/mapping";
-import { normalizeProject, type Item } from "../src/model/normalize";
+import { emptyIds, normalizeProject, type Item } from "../src/model/normalize";
 import { buildSchedule } from "../src/model/schedule";
 
 const TODAY = "2026-10-19";
@@ -14,7 +14,7 @@ const s = buildSchedule(p, m);
 const item = (key: string, extra: Partial<Item> = {}): Item => ({
   id: key, key, kind: "issue", number: 1, repo: "o/r", title: key, url: null, state: "open", stateReason: null,
   createdAt: null, closedAt: null, updatedAt: null, labels: [], assignees: [], milestone: null, issueType: null,
-  parentKey: null, subIssues: null, blockedBy: [], archived: false, fields: {}, ...extra,
+  parentKey: null, subIssues: null, blockedBy: [], archived: false, fields: {}, ids: emptyIds(), ...extra,
 });
 
 describe("buildGraph", () => {
