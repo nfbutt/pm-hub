@@ -93,6 +93,14 @@ OLLAMA_ORIGINS=https://nfbutt.github.io ollama serve
 
 Then run `ollama pull qwen3` and `ollama pull qwen3-embedding`, and set the address to `http://localhost:11434/v1` in *Settings → Local model*. LM Studio and llama.cpp's server work the same way.
 
+### Speaking to it, and working together
+
+There is a microphone in the top bar: speak and the words go into whatever you were typing. It records on this computer and is sent to a transcription server on this computer — never to the browser's own speech API, which sends your voice to a search engine. Turn one on in *Settings → Local model*.
+
+A plan can be shared with a team through the plan history: pm-hub writes baselines, applied changes and finished goals to a folder in a repository you choose, and everyone sees the same record. The *draft* stays in your browser until you apply it.
+
+The plan for making all of this hands-free, easy and collaborative is in `docs/hands-free-and-collaborative.md`.
+
 ### How long a piece of work takes
 
 The planner asks for three lengths for every piece of work — optimistic, most likely and pessimistic — and averages them the way PERT does. What you see is a range ("3d (2–6)"), never a single committed date, because a model's estimate is optimistic and nobody should plan around a number that was never a promise.

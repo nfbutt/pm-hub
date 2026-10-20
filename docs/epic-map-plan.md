@@ -6,6 +6,8 @@ The research behind the last phases is in `reports/AI assisted roadmap planning.
 
 **There is a second analysis** in `docs/ai-planning-and-voice.md`: what to do about the Gantt, an AI that drafts a whole plan, voice, and rolling changes back. It covers the same ground from the research side and says which order to build in — the short version is that **rollback comes before the AI planner**, because a plan that creates forty issues needs somewhere to go back to. That is the order they were built in.
 
+**And a third** in `docs/hands-free-and-collaborative.md`: making the app usable without a keyboard or a mouse, easy enough to be obvious, and workable with other people. The short version: one command surface that takes speech, keys or typing; a real voice loop rather than a dictation box; and collaboration built on a legible shared record rather than on co-editing, because every structured plan tool in the world is last-writer-wins and the research says the payoff is a shared mental model, not a merge algorithm.
+
 ## Where this is now
 
 The Epic Map is four views that answer four questions about a plan:
@@ -112,12 +114,24 @@ Each phase below is small enough to be one PR, and each was one. The order was b
 
 **Not doing.** Deleting the old export: the arrangement of the chart is a different thing from the plan, and both are useful.
 
+### The command surface, the voice loop and working together — planned
+
+**Why.** Three things at once: usable without hands, easy enough to be obvious, and workable with other people. The analysis is in `docs/hands-free-and-collaborative.md`; the research behind it is in `research_notes/Hands free and collaborative/`.
+
+**Phase 15 — one command surface.** A single bar that takes speech, keys or typing, and turns "move the API epic two weeks later" into ordinary operations. The routing is deterministic first: a pure `findTargets` (type-aware, number-aware, fuzzy), a grammar for the actions that exist, and a slot-filling model call only for what the grammar cannot parse — because the dominant failure of a model-routed command is a missing or wrong argument, so the parser never invents one. The new intentions the app lacks today: a named-epic merge, archive, and a relative-date expression.
+
+**Phase 16 — the voice loop.** Push to talk, the app answering out loud, barge-in, directive prompts instead of yes/no questions, the transcript always visible and editable, confirmation only for what cannot be undone, and every spoken answer paired with something visible.
+
+**Phase 17 — together.** Read issue comments and project status updates back, so a colleague's writing is visible in pm-hub; publish a draft as a proposal in the shared history folder; name who disposed of what; and close the last-second race between the check and the apply.
+
+**Phase 18 — easy for everyone.** Focus management in the drawer and the modal, one live region for state changes, a keyboard way to select items, hotkeys for review and apply, and a text alternative for the charts.
+
 ### Later, when there is something to write back
 
 - **Link types and lag.** Finish-to-start, start-to-start, finish-to-finish, start-to-finish, and a signed lag. GitHub only has "blocked by", so there is nowhere to write these yet; the plan model would need the field before the interface can.
 - **Resource levelling.** Smoothing first (it never moves the critical path), levelling only as a trade the user opts into. Needs per-person capacity, which pm-hub has hints of but not enough of.
 - **Work outside the project.** The loader fetches only what is in the project, so a dependency on an issue that is not in it can only be reported, never modelled.
-- **A spoken conversation, not just dictation.** The microphone now types into whatever field has the focus, and the planner takes a spoken description. Making the model *answer* out loud, and carrying a conversation across several turns, is the next step -- `speechSynthesis` with a local voice is the easy half.
+- **A spoken conversation, not just dictation.** The microphone now types into whatever field has the focus, and the planner takes a spoken description. Making the model *answer* out loud, and carrying a conversation across several turns, is phase 16 above -- `speechSynthesis` with a local voice is the easy half.
 - **A draft that can be edited.** The planner's draft can be ticked or unticked, but not renamed or re-dated. Editing the draft is a table of inputs, not a canvas.
 - **The plan's own history.** Baselines keep the shape of the plan but not the labels, the assignees or the links, so a baseline cannot be restored -- only compared with. A snapshot that could be put back would be a different thing.
 
