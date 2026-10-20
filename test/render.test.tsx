@@ -206,11 +206,11 @@ describe("editing surfaces render", () => {
   });
 
   const history: HistoryState = {
-    config: { mode: "local" }, setConfig: noop, baselines: [], quests: [], changes: [
+    config: { mode: "local" }, setConfig: noop, baselines: [], quests: [], proposals: [], changes: [
       { version: 1, at: "2026-03-01T00:00:00.000Z", author: "me", scenario: "Default", steps: [{ label: "Moved Orbit", status: "applied", kind: "setDates", reason: "vendor late" }] },
     ],
     loading: false, error: null, author: "me", reload: noop,
-    saveBaseline: async () => {}, readBaseline: async () => { throw new Error("none"); }, saveChange: async () => {}, saveQuest: async () => {},
+    saveBaseline: async () => {}, readBaseline: async () => { throw new Error("none"); }, saveChange: async () => {}, saveQuest: async () => {}, saveProposal: async () => {},
   };
   it("Changes", () => {
     const html = renderToString(<Changes base={project} edited={project} mapping={mapping} history={history} compareId={null} onCompare={noop} settingsHref="#" />);

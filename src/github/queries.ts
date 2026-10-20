@@ -136,7 +136,17 @@ query RepoMeta($owner: String!, $name: String!) {
   rateLimit { remaining limit resetAt cost }
 }`;
 
-export const ALL_DOCUMENTS = [VIEWER_PROJECTS, PROJECT_META, PROJECT_ITEMS, ITEMS_BY_ID, REPO_META];
+/** What people have said on the issues: the comments. */
+export const ITEM_COMMENTS = `
+query ItemComments($ids: [ID!]!) {
+  nodes(ids: $ids) {
+    ... on Issue {
+      comments(first: 20) { nodes { author { login } body createdAt } }
+    }
+  }
+}`;
+
+export const ALL_DOCUMENTS = [VIEWER_PROJECTS, PROJECT_META, PROJECT_ITEMS, ITEMS_BY_ID, REPO_META, ITEM_COMMENTS];
 // VIEWER_LOGIN is declared below and added at the end of the file.
 
 /** Who is signed in, for attributing history records. */

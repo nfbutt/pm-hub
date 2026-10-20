@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
+import { loadComments, type Comment } from "../github/load";
+import type { GitHubClient } from "../github/client";
 import { churnAcross, diffBaselines, scopeAddedAfterStart, snapshot, type Baseline, type BaselineDiff } from "../model/diff";
 import { rollbackNote, rollbackOps, summariseRollback } from "../model/rollback";
+import { describeProposal } from "../model/proposal";
 import type { Op } from "../model/ops";
 import type { Mapping } from "../model/mapping";
 import type { Project } from "../model/normalize";
@@ -22,9 +25,11 @@ interface Props {
   settingsHref: string;
   /** Records a rollback as a change in the current draft, to be reviewed and applied. */
   onRecord?: (label: string, ops: Op[]) => void;
+  /** Used to read what the team has said about the plan. */
+  client?: GitHubClient | null;
 }
 
-export function Changes({ base, edited, mapping, history, compareId, onCompare, settingsHref, onRecord }: Props) {
+export function Changes({ base, edited, mapping, history, compareId, onCompare, settingsHref, onRecord, client }: Props) {
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -33,6 +38,14 @@ export function Changes({ base, edited, mapping, history, compareId, onCompare, 
   const [before, setBefore] = useState<Baseline | null>(null);
   const [churnSet, setChurnSet] = useState<Baseline[]>([]);
   const [rollbackMsg, setRollbackMsg] = useState<string | null>(null);
+  // What the team has said about the plan. The comments are the one channel a colleague
+  // has into it, so pm-hub reads them.
+  const [comments, setComments] = useState<Map<string, Comment[]>>(new Map());
+  useEffect(() => {
+    if (!client) return;
+    const epics = base.items.filter(i => i.ids.content).slice(0, 30);
+    void loadComments(client, epics).then(setComments, () => undefined);
+  }, [client, base]);
   const current = withDraft ? edited : base;
   const nowSnap = useMemo(() => snapshot(current, mapping, buildSchedule(current, mapping), "now"), [current, mapping]);
   const diff: BaselineDiff | null = useMemo(() => (before ? diffBaselines(before, nowSnap) : null), [before, nowSnap]);
@@ -150,6 +163,38 @@ export function Changes({ base, edited, mapping, history, compareId, onCompare, 
           )}
         </section>
       </div>
+
+      {history.proposals.length > 0 && (
+        <section className="card pad">
+          <div className="section-h"><h2>Proposals</h2><span className="muted" style={{ fontSize: 12 }}>Changes someone has put up for the team</span></div>
+          <div style={{ display: "grid", gap: 8 }}>
+            {history.proposals.map(p => (
+              <div key={p.at} className="plan-sugg">
+                <div className="plan-sugg-title"><b>{p.name}</b> · {describeProposal(p, k => base.items.find(i => i.key === k)?.title ?? k)}</div>
+                <div className="muted">{p.author ?? "someone"} · {when(p.at)}{p.note ? ` · ${p.note}` : ""}</div>
+                {onRecord && <div className="emap-card-actions">
+                  <button className="btn small" onClick={() => { onRecord(`Took up the proposal “${p.name}”`, p.ops); setMsg("The proposal is in your draft. Review it, then apply."); }}>Take it into my draft</button>
+                </div>}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {comments.size > 0 && (
+        <section className="card pad">
+          <div className="section-h"><h2>What the team has said</h2><span className="muted" style={{ fontSize: 12 }}>Comments on the plan's own issues</span></div>
+          <div style={{ display: "grid", gap: 8 }}>
+            {[...comments.entries()].flatMap(([key, list]) => list.map((c, i) => (
+              <div key={`${key}-${i}`} className="plan-sugg">
+                <div className="plan-sugg-title">{base.items.find(it => it.key === key)?.title ?? key}</div>
+                <div className="muted">{c.author} · {when(c.at)}</div>
+                <div>{c.body.length > 400 ? `${c.body.slice(0, 400)}…` : c.body}</div>
+              </div>
+            ))).slice(0, 12)}
+          </div>
+        </section>
+      )}
 
       <section className="card pad">
         <div className="section-h"><h2>Applied changes</h2><span className="muted" style={{ fontSize: 12 }}>Most recent first</span></div>
