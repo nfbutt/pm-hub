@@ -19,6 +19,7 @@ import { Dependencies } from "./Dependencies";
 import { EpicMap } from "./EpicMap";
 import { Roadmap } from "./Roadmap";
 import { Planner } from "./Planner";
+import { Compare } from "./Compare";
 import { GlobalMic } from "./voice/GlobalMic";
 import { say } from "../ai/voice";
 import { useDictation } from "./voice/useDictation";
@@ -49,6 +50,7 @@ const TABS: { id: ViewId; label: string }[] = [
   { id: "dependencies", label: "Dependencies" },
   { id: "epics", label: "Epic Map" },
   { id: "roadmap", label: "Roadmap" },
+  { id: "compare", label: "Compare" },
   { id: "planner", label: "Planner" },
   { id: "changes", label: "What changed" },
   { id: "settings", label: "Settings" },
@@ -192,6 +194,8 @@ export function ProjectScreen({ source, view, onSignOut }: { source: Source; vie
               history={history} reviewHref={hrefFor(routeFor("review"))} />}
             {active === "roadmap" && <Roadmap project={shown} mapping={mapping} draft={draft} editor={editor} local={prefs.local}
               zoom={prefs.zoom} today={new Date().toISOString().slice(0, 10)} />}
+            {active === "compare" && <Compare project={shown} mapping={mapping} editor={editor} local={prefs.local}
+              onGoToReview={() => { location.hash = hrefFor(routeFor("review")); }} />}
             {active === "planner" && <Planner project={shown} mapping={mapping} editor={editor} local={prefs.local} />}
             {active === "changes" && project && (
               <Changes base={project} edited={shown} mapping={mapping} history={history} compareId={compare?.id ?? null}

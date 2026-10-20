@@ -25,6 +25,7 @@ Pick one of your GitHub Projects. pm-hub reads its items, field values, mileston
 | Epic Map | Epics as bubbles of tasks: overlaps, misplaced tasks, kinds of work with no epic, a structure score; drag tasks between epics; a deck of suggestions you can accept or turn down; meeting mode, a timelapse of the plan and goals to work towards |
 | Roadmap | Every epic on one timeline with the dependencies drawn between them: the chain that decides when the plan ends, how much slack each epic has, and what is broken about the plan as it stands |
 | Planner | Describe what you want to build and a model on your computer drafts the plan — epics, stories, dates, a release, what has to happen first. You review it, then it becomes one change |
+| Compare | Two epics side by side: what each covers, what they have in common, what only one has. Drag a story from one to the other to move it |
 | Settings | Change how dates, epics, swimlanes, releases and priority are read; fiscal-year quarters |
 | Review | Every pending change with before and after, checked against GitHub, then applied |
 
@@ -92,6 +93,12 @@ OLLAMA_ORIGINS=https://nfbutt.github.io ollama serve
 ```
 
 Then run `ollama pull qwen3` and `ollama pull qwen3-embedding`, and set the address to `http://localhost:11434/v1` in *Settings → Local model*. LM Studio and llama.cpp's server work the same way.
+
+### Comparing two epics
+
+Pick two epics and see what each covers, what they have in common, and what only one of them has. A model on your computer can read both and say so — but every claim it makes has to quote the words it came from, and a claim whose words are not really in the stories is dropped rather than shown.
+
+Drag a story from one side to the other to move it. The moves are listed, you tick the ones you want, and **Apply to GitHub** asks first: it stages them in your draft and takes you to the review screen, where you see every change and the exact calls before anything is written. Nothing is ever written without you saying so.
 
 ### Speaking to it, and working together
 
