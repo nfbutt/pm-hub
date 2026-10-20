@@ -1,8 +1,8 @@
 import type { GitHubClient } from "./client";
 import { GitHubError } from "./client";
-import { PROJECT_ITEMS, PROJECT_META, VIEWER_PROJECTS } from "./queries";
+import { ITEM_COMMENTS, PROJECT_ITEMS, PROJECT_META, VIEWER_PROJECTS } from "./queries";
 import type { ProjectItemsData, ProjectMetaData, RawItem, ViewerProjectsData } from "./types";
-import { normalizeProject, summarizeProjects, type Project, type ProjectSummary } from "../model/normalize";
+import { normalizeProject, summarizeProjects, type Item, type Project, type ProjectSummary } from "../model/normalize";
 
 export interface Viewer { login: string; name: string | null; avatarUrl: string }
 
@@ -35,4 +35,32 @@ export async function loadProject(
     after = conn.pageInfo.endCursor;
   }
   return normalizeProject(owner, project, items, new Date().toISOString());
+}
+
+/** What someone said on an issue. */
+export interface Comment { author: string; body: string; at: string }
+
+/**
+ * The comments on some items, newest first. The comments are the one channel a colleague
+ * has into the plan, so pm-hub reads them.
+ */
+export async function loadComments(client: GitHubClient, items: Item[]): Promise<Map<string, Comment[]>> {
+  const wanted = items.filter(i => i.ids.content);
+  const out = new Map<string, Comment[]>();
+  if (!wanted.length) return out;
+  const ids = wanted.map(i => i.ids.content!);
+  for (let i = 0; i < ids.length; i += 20) {
+    const data = await client.query<{ nodes: ({ comments?: { nodes: { author: { login: string } | null; body: string; createdAt: string }[] } } | null)[] }>(
+      ITEM_COMMENTS, { ids: ids.slice(i, i + 20) });
+    // The nodes come back in the order we asked for them.
+    (data.nodes ?? []).forEach((node, index) => {
+      const key = wanted[i + index]?.key;
+      if (!key || !node?.comments) return;
+      const comments = node.comments.nodes
+        .filter(c => c.body && c.body.trim())
+        .map(c => ({ author: c.author?.login ?? "someone", body: c.body.trim(), at: c.createdAt }));
+      if (comments.length) out.set(key, comments);
+    });
+  }
+  return out;
 }

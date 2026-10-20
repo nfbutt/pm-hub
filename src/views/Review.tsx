@@ -89,6 +89,23 @@ export function Review({ base, groups, titleOf, client, onApplied, onRecord, ref
     return groups.map(g => { const ss = steps.slice(at, at + g.ops.length); at += g.ops.length; return { ...g, steps: ss }; });
   }, [groups, steps]);
 
+  /** Puts the pending changes up for the team rather than writing them. */
+  async function propose() {
+    if (!history) return;
+    setHistNote(null);
+    try {
+      await history.saveProposal({
+        version: 1, at: new Date().toISOString(), author: history.author,
+        name: `${ops.length} change${ops.length === 1 ? "" : "s"}`,
+        note: "Put up from the review screen.",
+        ops,
+      });
+      setHistNote("Your proposal is in the shared plan history. Anyone with the folder can pick it up and review it.");
+    } catch (e) {
+      setHistNote(`The proposal could not be saved: ${e instanceof Error ? e.message : "unknown error"}`);
+    }
+  }
+
   async function apply(dryRun: boolean) {
     if (!client) return;
     const run = steps.map(s => ({ ...s, status: s.include && s.status === "conflict" ? "ready" as const : s.status }));
@@ -223,6 +240,14 @@ export function Review({ base, groups, titleOf, client, onApplied, onRecord, ref
             </>
           )}
         </section>
+      )}
+
+      {phase === "ready" && ops.length > 0 && history?.config.mode === "github" && (
+        <div className="callout info" style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <span>Share these changes with your team instead of applying them?</span>
+          <button className="btn" onClick={() => void propose()}>Put up a proposal</button>
+          <span className="muted" style={{ fontSize: 12 }}>It goes into the shared plan history, and whoever picks it up reviews it before anything is written.</span>
+        </div>
       )}
 
       {phase === "ready" && ops.length > 0 && (
