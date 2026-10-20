@@ -1,6 +1,8 @@
 import { labelPrefixes, type LaneRule, type Mapping, type ReleaseRule } from "../model/mapping";
 import type { Project } from "../model/normalize";
 import type { Prefs } from "../store/cache";
+import { defaultLocal, testConnection } from "../ai/local";
+import { useState } from "react";
 import type { ReactNode } from "react";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -16,6 +18,17 @@ export function Settings({ project, mapping, setMapping, resetMapping, prefs, se
   const epicLabels = [...new Set(project.items.flatMap(i => i.labels))].filter(l => /epic/i.test(l)).sort();
   const issueTypes = [...new Set(project.items.map(i => i.issueType).filter((t): t is string => !!t))].sort();
   const set = (patch: Partial<Mapping>) => setMapping({ ...mapping, ...patch });
+  const local = prefs.local ?? defaultLocal;
+  const setLocal = (patch: Partial<typeof local>) => setPrefs({ ...prefs, local: { ...local, ...patch } });
+  const [probe, setProbe] = useState<{ ok: boolean; message: string } | null>(null);
+  const [probing, setProbing] = useState(false);
+  const probeConnection = async () => {
+    setProbing(true);
+    setProbe(null);
+    const result = await testConnection(local);
+    setProbe(result);
+    setProbing(false);
+  };
 
   const laneValue = mapping.lane.kind === "field" ? `field:${mapping.lane.field}` : mapping.lane.kind === "labelPrefix" ? `prefix:${mapping.lane.prefix}` : "none";
   const releaseValue = mapping.release.kind === "milestone" ? "milestone" : mapping.release.kind === "iteration" ? `iteration:${mapping.release.field}`
@@ -95,6 +108,37 @@ export function Settings({ project, mapping, setMapping, resetMapping, prefs, se
         <Select id="p-fy" label="Fiscal year starts in" value={String(prefs.fyStartMonth)} onChange={v => setPrefs({ ...prefs, fyStartMonth: Number(v) })}
           options={MONTHS.map((m, i) => [String(i + 1), i === 0 ? "January (calendar year)" : i === 9 ? "October (US federal)" : m] as [string, string])}
           hint="Changes the quarter labels on the timeline. Applies to every project." />
+      </section>
+
+      <section className="card pad settings">
+        <h2>Local model</h2>
+        <p className="muted" style={{ maxWidth: "70ch" }}>
+          A model running on this computer can help the Epic Map compare work by meaning and explain what it sees.
+          Only issue titles and bodies are sent, and only to the address below, which has to be on this computer.
+          Your GitHub token is never part of a request.
+        </p>
+        <label className="check-row">
+          <input type="checkbox" checked={local.enabled} onChange={e => setLocal({ enabled: e.target.checked })} />
+          Use a local model for the Epic Map
+        </label>
+        <div className="setting">
+          <label htmlFor="ai-base">Address</label>
+          <input id="ai-base" className="input" value={local.base} onChange={e => setLocal({ base: e.target.value })}
+            placeholder="http://localhost:11434/v1" />
+          <span className="muted">An OpenAI-compatible endpoint, e.g. Ollama or LM Studio.</span>
+        </div>
+        <div className="setting">
+          <label htmlFor="ai-chat">Chat model</label>
+          <input id="ai-chat" className="input" value={local.chatModel} onChange={e => setLocal({ chatModel: e.target.value })} />
+        </div>
+        <div className="setting">
+          <label htmlFor="ai-embed">Embedding model</label>
+          <input id="ai-embed" className="input" value={local.embedModel} onChange={e => setLocal({ embedModel: e.target.value })} />
+        </div>
+        <div className="drow">
+          <button className="btn" onClick={probeConnection} disabled={probing}>{probing ? "Testing…" : "Test connection"}</button>
+        </div>
+        {probe && <p className={probe.ok ? "muted" : "callout bad"}>{probe.message}</p>}
       </section>
       {extra}
     </div>

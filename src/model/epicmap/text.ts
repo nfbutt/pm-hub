@@ -94,3 +94,50 @@ export function sharedTerms(a: Vec, b: Vec, n: number, surface?: Map<string, str
   for (const [t, w] of a) { const x = b.get(t); if (x) both.push([t, Math.min(w, x)]); }
   return both.sort((p, q) => q[1] - p[1]).slice(0, n).map(([t]) => t.startsWith("label:") ? `label ${t.slice(6)}` : surface?.get(t) ?? t);
 }
+
+/**
+ * A dense vector as a sparse one, so the same maths (cosine, centroid, sum) works for
+ * both kinds of vector. The coordinates become the terms.
+ */
+export function denseToVec(v: number[]): Vec {
+  const out: Vec = new Map();
+  v.forEach((w, i) => { if (w) out.set(String(i), w); });
+  return out;
+}
+
+/** A dense vector scaled to unit length, so a dot product is a cosine. */
+export function denseNormalize(v: number[]): number[] {
+  let s = 0;
+  for (const w of v) s += w * w;
+  if (!s) return v;
+  const k = 1 / Math.sqrt(s);
+  return v.map(w => w * k);
+}
+
+/** Cosine of two dense vectors. */
+export function denseCosine(a: number[], b: number[]): number {
+  let s = 0, na = 0, nb = 0;
+  const n = Math.min(a.length, b.length);
+  for (let i = 0; i < n; i++) { const x = a[i]!, y = b[i]!; s += x * y; na += x * x; nb += y * y; }
+  return na > 0 && nb > 0 ? s / Math.sqrt(na * nb) : 0;
+}
+
+/** A short, stable hash of some text, used as a cache key. */
+export function hashText(text: string): string {
+  let h1 = 0x811c9dc5, h2 = 5381;
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 16777619);
+    h2 = Math.imul(h2, 33) ^ c;
+  }
+  return (h1 >>> 0).toString(16).padStart(8, "0") + (h2 >>> 0).toString(16).padStart(8, "0");
+}
+
+/**
+ * Embedding cosines sit in a narrower, higher band than TF-IDF ones: unrelated text is
+ * often 0.2 and related text 0.7, where TF-IDF runs 0 to 0.5. Stretching the band keeps
+ * one set of thresholds meaningful for both kinds of vector.
+ */
+export function denseScore(c: number): number {
+  return Math.max(0, Math.min(1, (c - 0.2) / 0.6));
+}

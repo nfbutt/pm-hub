@@ -7,6 +7,7 @@ import { applyOps, type Op } from "../ops";
 import { categoryName } from "./categories";
 import { communities } from "./cluster";
 import { analyze, type EpicMapModel } from "./index";
+import { hashText } from "./text";
 
 export type SuggestionKind = "move" | "merge" | "split" | "gap";
 
@@ -24,6 +25,8 @@ export interface Suggestion {
   epics: string[];
   /** The items involved. */
   items: string[];
+  /** True when a model on this computer wrote the words. */
+  byModel?: boolean;
 }
 
 /** What you said about a suggestion: no, or not for a while. */
@@ -171,4 +174,27 @@ export function visibleSuggestions(list: Suggestion[], memory: SuggestionMemory,
     const until = new Date(v.snoozedUntil).getTime();
     return Number.isFinite(until) && until <= now;
   });
+}
+
+/**
+ * A suggestion built from an idea the model came up with: a new epic with its own name,
+ * holding the work the model picked out. Keys that are not in the project are dropped.
+ */
+export function ideaSuggestion(model: EpicMapModel, project: Project, mapping: Mapping, idea: { title: string; why: string; taskKeys: string[] }): Suggestion | null {
+  const byKey = new Map(project.items.map(i => [i.key, i]));
+  const keys = [...new Set(idea.taskKeys)].filter(k => byKey.has(k));
+  if (!keys.length) return null;
+  const create = newItem(project, mapping, idea.title, { epic: true });
+  const created = create[0]?.kind === "create" ? create[0].key : null;
+  if (!created) return null;
+  const ops: Op[] = [...create, ...keys.flatMap(k => moveToParent(project, byKey.get(k)!, created))];
+  const next = analyze(applyOps(project, ops).project, mapping, { openOnly: model.openOnly });
+  return {
+    id: `gap-idea:${hashText(`${idea.title}|${keys.join(",")}`)}`,
+    kind: "gap",
+    title: `Give this work an epic: “${idea.title}”`,
+    why: idea.why,
+    gain: model.score === null ? 0 : (next.score ?? 0) - model.score,
+    ops, epics: [], items: keys, byModel: true,
+  };
 }

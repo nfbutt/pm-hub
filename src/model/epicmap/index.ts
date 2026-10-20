@@ -3,8 +3,8 @@
 import { isEpic, priorityOf, releaseOf, type Mapping } from "../mapping";
 import type { Item, Project } from "../normalize";
 import { CATEGORIES, categorize, dominant, mergeMixes, UNCATEGORIZED, type Mix } from "./categories";
-import { buildEdges, structureScore, type Edge } from "./graph";
-import { centroid, cosine, sharedTerms, terms, tfidf, type Vec } from "./text";
+import { buildEdges, buildEdgesFrom, structureScore, type Edge } from "./graph";
+import { centroid, cosine, denseCosine, denseNormalize, denseScore, denseToVec, sharedTerms, terms, tfidf, type Vec } from "./text";
 
 export interface MapTask {
   key: string; title: string; state: Item["state"]; assignees: string[];
@@ -45,7 +45,14 @@ export interface EpicMapModel {
   openOnly: boolean;
 }
 
-export interface MapOptions { openOnly: boolean }
+export interface MapOptions {
+  openOnly: boolean;
+  /**
+   * Embedding vectors by item key. When every item in the map has one, items are
+   * compared by meaning instead of by shared words.
+   */
+  vectors?: Map<string, number[]> | null;
+}
 
 /** Nearest epic above an item, skipping plain parents (sub-sub-issues roll up to their epic). */
 function epicAbove(i: Item, byKey: Map<string, Item>, epics: Set<string>): string | null {
@@ -68,20 +75,35 @@ export function analyze(p: Project, m: Mapping, opts: MapOptions): EpicMapModel 
   const surface = new Map<string, string>();
   const docs = [...taskItems, ...epicItems].map(i => terms(i.title, i.body, i.labels, surface));
   const vecs = tfidf(docs);
-  const tvec = vecs.slice(0, taskItems.length), evec = vecs.slice(taskItems.length);
+  const tvecTerms = vecs.slice(0, taskItems.length), evecTerms = vecs.slice(taskItems.length);
   const taskIndex = new Map(taskItems.map((t, i) => [t.key, i]));
   const epicOf = taskItems.map(t => epicAbove(t, byKey, epicSet));
 
+  // With embeddings, items are compared by meaning. Every item needs a vector, or the
+  // map falls back to words: half the items in one space and half in another is no space.
+  const dense = pickVectors(opts.vectors, taskItems, epicItems);
+  const tvec = dense ? dense.task.map(denseToVec) : tvecTerms;
+  const evec = dense ? dense.epic.map(denseToVec) : evecTerms;
+  // Embedding cosines sit higher than TF-IDF ones, so they are stretched to match.
+  const stretch = dense ? denseScore : (c: number) => c;
+
   const links: [number, number][] = [];
   taskItems.forEach((t, i) => { for (const b of t.blockedBy) { const j = taskIndex.get(b.key); if (j !== undefined) links.push([i, j]); } });
-  const edges = buildEdges(tvec, links);
+  const edges = dense
+    ? buildEdgesFrom((i, j) => stretch(denseCosine(dense.task[i]!, dense.task[j]!)), taskItems.length, links)
+    : buildEdges(tvecTerms, links);
   const group = (epics: (string | null)[]) => epics.map((e, i) => e ?? `none:${i}`);
   const score = structureScore(edges, group(epicOf));
 
   // Each epic as the sum of its own description (counted twice) and its tasks.
-  const sums = new Map<string, Vec>();
-  epicItems.forEach((e, i) => sums.set(e.key, scale(evec[i]!, 2)));
-  taskItems.forEach((_, i) => { const e = epicOf[i]; if (e) addInto(sums.get(e)!, tvec[i]!); });
+  const sumsOf = (epicVecs: Vec[], taskVecs: Vec[]) => {
+    const sums = new Map<string, Vec>();
+    epicItems.forEach((e, i) => sums.set(e.key, scaleVec(epicVecs[i]!, 2)));
+    taskItems.forEach((_, i) => { const e = epicOf[i]; if (e) addInto(sums.get(e)!, taskVecs[i]!); });
+    return sums;
+  };
+  const wordSums = sumsOf(evecTerms, tvecTerms);
+  const sums = dense ? sumsOf(evec, tvec) : wordSums;
   const norms = new Map([...sums].map(([k, v]) => [k, Math.sqrt(dot(v, v))]));
 
   const mixes = taskItems.map(t => categorize(t.title, t.body, t.labels));
@@ -91,13 +113,13 @@ export function analyze(p: Project, m: Mapping, opts: MapOptions): EpicMapModel 
     if (own) {
       // Cosine to the epic without this task in it: |S - v|² = |S|² - 2·v·S + |v|².
       const s = sums.get(own)!, vs = dot(v, s), vv = dot(v, v), n2 = norms.get(own)! ** 2 - 2 * vs + vv;
-      ownSim = n2 > 1e-9 ? (vs - vv) / Math.sqrt(n2) : 0;
+      ownSim = n2 > 1e-9 ? stretch((vs - vv) / Math.sqrt(n2)) : 0;
     }
     let best: MapTask["best"] = null;
     for (const [k, s] of sums) {
       if (k === own) continue;
       const n = norms.get(k)!;
-      const sim = n > 0 ? dot(v, s) / n : 0;
+      const sim = n > 0 ? stretch(dot(v, s) / n) : 0;
       if (!best || sim > best.sim) best = { epicKey: k, sim };
     }
     const misfit = !!best && best.sim >= 0.15 && best.sim > ownSim + 0.05;
@@ -145,14 +167,19 @@ export function analyze(p: Project, m: Mapping, opts: MapOptions): EpicMapModel 
   });
 
   const cents = new Map(epicItems.map(e => [e.key, centroid([{ v: sums.get(e.key)!, w: 1 }])]));
+  // The words two epics share come from the text, even when the map compares embeddings.
+  const wordCents = new Map(epicItems.map(e => [e.key, centroid([{ v: wordSums.get(e.key)!, w: 1 }])]));
   const overlaps: Overlap[] = [];
   for (let i = 0; i < epicItems.length; i++) for (let j = i + 1; j < epicItems.length; j++) {
     const a = epicItems[i]!.key, b = epicItems[j]!.key;
     const ca = cents.get(a)!, cb = cents.get(b)!;
     const sa = strength.get(a) ?? 0, sb = strength.get(b) ?? 0;
     const cross = Math.min(sa, sb) > 0 ? (between.get(pairKey(a, b)) ?? 0) / Math.min(sa, sb) : 0;
-    const s = 0.6 * cosine(ca, cb) + 0.4 * Math.min(1, cross);
-    if (s >= 0.12) overlaps.push({ a, b, score: s, shared: sharedTerms(ca, cb, 4, surface) });
+    const s = 0.6 * stretch(cosine(ca, cb)) + 0.4 * Math.min(1, cross);
+    if (s >= 0.12) {
+      const wa = wordCents.get(a)!, wb = wordCents.get(b)!;
+      overlaps.push({ a, b, score: s, shared: sharedTerms(wa, wb, 4, surface) });
+    }
   }
   overlaps.sort((x, y) => y.score - x.score);
 
@@ -193,5 +220,14 @@ function scoreIfMovedRaw(edges: Edge[], epicOf: (string | null)[], idx: number, 
 // Works on unnormalised sums too: it is a plain dot product.
 const dot = cosine;
 const pairKey = (a: string, b: string) => (a < b ? `${a}\u0000${b}` : `${b}\u0000${a}`);
-const scale = (v: Vec, k: number): Vec => new Map([...v].map(([t, w]) => [t, w * k]));
+const scaleVec = (v: Vec, k: number): Vec => new Map([...v].map(([t, w]) => [t, w * k]));
 function addInto(into: Vec, v: Vec) { for (const [t, w] of v) into.set(t, (into.get(t) ?? 0) + w); }
+
+/** The embedding vectors of every item in the map, or null when one is missing. */
+function pickVectors(vectors: Map<string, number[]> | null | undefined, tasks: Item[], epics: Item[]): { task: number[][]; epic: number[][] } | null {
+  if (!vectors || !vectors.size) return null;
+  const task: number[][] = [], epic: number[][] = [];
+  for (const i of tasks) { const v = vectors.get(i.key); if (!v?.length) return null; task.push(denseNormalize(v)); }
+  for (const i of epics) { const v = vectors.get(i.key); if (!v?.length) return null; epic.push(denseNormalize(v)); }
+  return { task, epic };
+}

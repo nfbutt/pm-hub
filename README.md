@@ -71,6 +71,25 @@ Epics and stories change all the time: they get re-dated, re-scoped, split, move
 - pm-hub writes to GitHub **only** when you press Apply on the review screen, or save history to a repo you chose. Every project and issue write lives in `src/github/mutations.ts` and is sent only by `src/github/apply.ts`; history files are written only by `src/github/contents.ts`, through the contents API. `test/write-guard.test.ts` enforces all three.
 - Loading a project costs about 35 GraphQL points per 100 items, out of GitHub's 5,000 per hour. A warning appears when fewer than 500 remain.
 
+### A model on your own computer (optional)
+
+The Epic Map can ask a model running on **your** machine to compare work by meaning, name what an epic is really about, explain an overlap, and suggest epics that are missing. It is off until you turn it on in *Settings → Local model*.
+
+- **Nothing leaves your computer.** The address has to be `localhost` or `127.0.0.1`; anything else is refused before a request is made.
+- **Only issue text goes to the model**: titles and bodies, plus the epic titles and the words two epics share. **Your GitHub token is never part of a request**, and no project metadata, file or repository is sent.
+- Embeddings and answers are cached in your browser's IndexedDB, so the model is asked once per item, not once per visit.
+- If the model is slow, unreachable or answers something that does not make sense, pm-hub quietly falls back to its own analysis.
+- The built page's Content-Security-Policy allows `http://localhost:*` and `http://127.0.0.1:*` in `connect-src`, and nothing else.
+
+Ollama refuses browser calls from another origin unless you allow this page. Start it with:
+
+```bash
+OLLAMA_ORIGINS=https://nfbutt.github.io ollama serve
+```
+
+Then run `ollama pull qwen3` and `ollama pull qwen3-embedding`, and set the address to `http://localhost:11434/v1` in *Settings → Local model*. LM Studio and llama.cpp's server work the same way.
+
+
 ## Develop
 
 ```bash

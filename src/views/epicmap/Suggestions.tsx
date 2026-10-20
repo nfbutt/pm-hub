@@ -35,7 +35,7 @@ export function Suggestions({ items, onAccept, onReject, onSnooze, onFocus, read
               {s.gain !== 0 && <span className={`emap-gain ${s.gain > 0 ? "up" : "down"}`}>{s.gain > 0 ? "+" : ""}{s.gain} score</span>}
             </div>
             <div className="emap-card-title">{s.title}</div>
-            <div className="muted emap-card-why">{s.why}</div>
+            <div className="muted emap-card-why">{s.byModel ? "✦ " : ""}{s.why}</div>
             {readOnly ? (
               <div className="muted emap-card-why">Turn off “GitHub only” to act on this.</div>
             ) : (
