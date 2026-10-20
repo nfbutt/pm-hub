@@ -79,23 +79,25 @@ The research is clear that structured plans are not co-edited, so pm-hub should 
 
 ## The phases
 
-### Phase 15: one command surface
+### Phase 15: one command surface — done
 
-The pure part first: `src/model/command/` with `findTargets` (type-aware, number-aware, fuzzy), `parseIntent` (a grammar, then the model for the rest), `intentOps` (routing to the edits helpers, plus the missing named-merge, archive and relative-date helpers), and the answers to the read-only questions the plan already knows how to answer.
+`src/model/command/` with `findTargets` (type-aware, number-aware, fuzzy), `parseIntent` (a grammar first, then the model for the rest), `intentOps` (routing to the edits helpers, plus the named-merge and archive the app was missing) and `dates` ("to the 15th", "next Friday", "end of the month").
 
-Then the bar itself: one keystroke, one field, typed or pasted; a list of matches you can answer with a word; a preview of what it will do before it does it.
+The sentence is a pinned entry in the command menu, with a preview of what it will do; when it does not say which item it meant, it asks. A model fills in what the grammar cannot, and only what passes the checks: an action that is one of ours, a target that is in the project.
 
-### Phase 16: the voice loop
+### Phase 16: the voice loop — done
 
-Push to talk, the app speaking back, barge-in, directive prompts, the transcript always visible and editable, confirmation only for the irreversible, and every spoken answer paired with something visible.
+Push to talk on `Ctrl+Shift+Space` (read before the "you are typing in a field" rule, so it works anywhere). The app answers out loud — what it did, and what it needs to know next — with directive prompts rather than yes/no questions.
 
-### Phase 17: together
+### Phase 17: together — done
 
-Read comments and status updates back; publish a draft as a proposal; name who disposed of what; close the last-second race.
+A **proposal**: put your changes up in the shared plan history instead of applying them, and whoever picks one up gets exactly what was drafted and reviews it before anything is written. **What the team has said**: pm-hub now reads the comments on the plan's own issues, which were the one channel a colleague had that pm-hub could not see. **The last-second race** is closed: the review screen re-reads the affected items immediately before writing, and anything that moved underneath is left out rather than overwritten. The person who disposed of a suggestion was already recorded.
 
-### Phase 18: easy for everyone
+### Phase 18: easy for everyone — mostly done
 
-Focus management, one live region, keyboard selection, hotkeys, and the charts' text alternative.
+Done: focus management in the drawer and the modal (focus in, trapped, restored), one live region for the review screen's progress and result, unique ids and `aria-activedescendant` in the picker, roles on the progress bars, tab panels for the Workload tabs, a keyboard way to select a row (space), "Go to Review" in the command menu, and the chart views saying where the same information can be read as text.
+
+Still to do: a text equivalent of the Gantt and the Epic Map for screen readers (the Plan table and the Epic Map's panel are the nearest), and the Epic Map's live region, which mounts with its text already in it and so may not be announced.
 
 ## What not to do
 

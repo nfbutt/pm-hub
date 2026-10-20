@@ -362,10 +362,19 @@ export function Gantt({ project, mapping, draft, editor, changed, onDiscardAll, 
                               onBlur={() => { editor?.record(`Renamed to “${renaming.text.trim()}”`, setTitle(r.item, renaming.text)); setRenaming(null); }}
                               onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") setRenaming(null); }} />
                           ) : (
-                            <button className="ename" title={editor ? `${r.item.title} (double-click to rename, Ctrl-click to select)` : r.item.title}
+                            <button className="ename" title={editor ? `${r.item.title} (space to select, Ctrl-click to select, double-click to rename)` : r.item.title}
                               onClick={e => {
                                 if ((e.ctrlKey || e.metaKey || e.shiftKey) && onSelect) { const n = new Set(selected); if (n.has(r.item.key)) n.delete(r.item.key); else n.add(r.item.key); onSelect(n); return; }
                                 setOpen(r.item.key);
+                              }}
+                              onKeyDown={e => {
+                                // Space selects, so the commands that act on a selection
+                                // are not mouse-only.
+                                if (e.key !== " " || !onSelect) return;
+                                e.preventDefault();
+                                const n = new Set(selected);
+                                if (n.has(r.item.key)) n.delete(r.item.key); else n.add(r.item.key);
+                                onSelect(n);
                               }}
                               onDoubleClick={() => { if (editor) setRenaming({ key: r.item.key, text: r.item.title }); }}>
                               <span className="etitle">{r.item.title}</span>

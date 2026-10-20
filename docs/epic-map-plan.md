@@ -128,11 +128,11 @@ What was built:
 
 Still to do in this phase: a model filling in what the grammar cannot parse, and the relative-date expressions ("to the 15th", "before the release").
 
-**Phase 16 — the voice loop.** Push to talk, the app answering out loud, barge-in, directive prompts instead of yes/no questions, the transcript always visible and editable, confirmation only for what cannot be undone, and every spoken answer paired with something visible.
+**Phase 16 — the voice loop — done.** Push to talk on `Ctrl+Shift+Space`, the app answering out loud, directive prompts instead of yes/no questions, and every spoken answer paired with something visible.
 
-**Phase 17 — together.** Read issue comments and project status updates back, so a colleague's writing is visible in pm-hub; publish a draft as a proposal in the shared history folder; name who disposed of what; and close the last-second race between the check and the apply.
+**Phase 17 — together — done.** A proposal in the shared plan history, the comments on the plan's own issues read back so a colleague's writing is visible, and the last-second race between the check and the apply closed.
 
-**Phase 18 — easy for everyone.** Focus management in the drawer and the modal, one live region for state changes, a keyboard way to select items, hotkeys for review and apply, and a text alternative for the charts.
+**Phase 18 — easy for everyone — mostly done.** Focus management in the drawer and the modal, live regions, unique ids in the picker, roles on the progress bars, a keyboard way to select a row, and the chart views saying where the same information can be read as text. Still to do: a text equivalent of the Gantt and the Epic Map for screen readers, and the Epic Map's live region, which mounts with its text already in it.
 
 ### Later, when there is something to write back
 
