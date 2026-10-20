@@ -1,6 +1,6 @@
 # Epic Map: plan for the remaining phases
 
-This is the build plan for the rest of the Epic Map, written for whoever picks it up next. Phases 5, 6 and 7 are done. Phase 8 below is still to build.
+This is the build plan for the rest of the Epic Map, written for whoever picks it up next. Phases 5, 6, 7 and 8 are done.
 
 ## What exists (phase 5, done)
 
@@ -8,7 +8,7 @@ This is the build plan for the rest of the Epic Map, written for whoever picks i
 |---|---|---|
 | Analysis engine (pure) | `src/model/epicmap/text.ts`, `categories.ts`, `graph.ts`, `index.ts` | `analyze(project, mapping, {openOnly})` returns `EpicMapModel` with: tasks (+ misfit flag), epics (health, cohesion, coupling, category mix, flags), overlaps (score + shared words), moves, gaps, structure score. `scoreIfMoved(model, taskKey, epicKey)` previews a drop. |
 | Canvas | `src/views/epicmap/canvas.ts` | Cytoscape + fCoSE, loaded lazily (`import()` in `EpicMap.tsx`), so it is its own chunk. Epics are compound nodes, tasks are child nodes, `tray` is "No epic", `g:<category>` nodes are gap ghosts. Drag is hit-tested on `grab`/`drag`/`free` and reported through `CanvasEvents.drop`. The canvas never edits anything. |
-| View | `src/views/EpicMap.tsx`, `src/views/epicmap/epicmap.css` | Score, misplaced tasks (Move button), gaps (Create epic), overlaps, epic health, legend. The tab is registered in `src/router.ts` (`"epics"`) and `src/views/ProjectScreen.tsx` (`TABS` and the render branch). |
+| View | `src/views/EpicMap.tsx`, `src/views/epicmap/epicmap.css` | Score, misplaced tasks, gaps, overlaps, epic health, legend. Phase 6 replaced the misplaced-tasks and gaps sections with the suggestion deck. The tab is registered in `src/router.ts` (`"epics"`) and `src/views/ProjectScreen.tsx` (`TABS` and the render branch). |
 | Data | `src/github/queries.ts`, `types.ts`, `src/model/normalize.ts` | The issue/draft `body` is fetched and clipped to 2,000 characters (`Item.body?`). |
 | Demo data | `src/demo/fixture.ts` | `TOPICS` gives each epic its wording. `STRAYS` plants misplaced stories and a security theme no epic owns. |
 | Tests | `test/epicmap.test.ts`, `test/render.test.tsx` | Run with `npm test`. Also run `npm run typecheck` and `npm run build`. |
@@ -86,7 +86,20 @@ Built as described below, with these differences worth knowing:
 6. **UI:** a status pill in the Epic Map header ("Qwen connected" / "Local analysis"), and a "✦" marker on any text the model wrote.
 7. **Tests:** stub `fetch`. Cover a happy path, invalid JSON being dropped, and the endpoint being down while `analyze` still works.
 
-## Phase 8: Meeting mode, timelapse and quests
+## Phase 8: Meeting mode, timelapse and quests — done
+
+Goal: run the Epic Map as a meeting, look at how the plan changed over time, and give the team something to aim at. Built as described below.
+
+| Area | Files | Notes |
+|---|---|---|
+| Meeting mode | `src/views/epicmap/MeetingMode.tsx` | A panel over the map (the map stays visible). The agenda is the five worst epics by health, then the five best suggestions. "Next" points the map at the item, with an optional three-minute timer. The tally (moves, merges, new epics, score) is kept in the Epic Map's state, so accepts from the panel count too. The summary at the end links to Review. |
+| Timelapse | `src/views/epicmap/Timelapse.tsx`, `src/model/epicmap/baseline.ts` | Every baseline in the plan history is read back as a project (`baselineProject`, `baselineMapping`) and run through the same analysis. A slider steps through them and the map follows; the score over time is a line chart. The baselines are read when there are new ones, not on every edit. |
+| Quests | `src/model/epicmap/quests.ts` | `quests(before, now)`: resolve 3 overlaps, adopt every orphan, fill a gap, raise the score by 10. Pure, and shown as a small card in the panel. |
+| Finished quests | `src/store/history.ts`, `src/views/useHistory.ts` | `QuestRecord` sits with the rest of the plan history: `quests/` in the history folder (or in the browser). The team sees what was finished. |
+| Lenses | `src/model/epicmap/lens.ts`, `src/views/epicmap/canvas.ts` | Colour and group the map by Category (default), Release, Assignee or Priority. The groups take the colours the categories already use, so both themes still work. |
+| Tests | `test/quests.test.ts` | The quests, a baseline read back as a map, and the lenses. |
+
+### The plan as written
 
 1. **Meeting mode** (`src/views/epicmap/MeetingMode.tsx`): a full-screen overlay.
    - Agenda: the 5 worst epics by health, then the top 5 suggestions.
@@ -104,7 +117,8 @@ Built as described below, with these differences worth knowing:
 
 ## Known limits of v1 (good first fixes)
 
-- Epic labels are drawn in model units, so they shrink when you zoom out. Consider a constant-size label overlay or a `min-zoomed-font-size` tweak.
+- Epic labels are drawn in model units, so they shrink when you zoom out. A `min-zoomed-font-size` now keeps them readable; a constant-size label overlay would be better still.
 - Similarity is plain TF-IDF over titles, bodies and labels. Generic verbs are filtered by `GENERIC` in `text.ts`; extend that list for real projects.
 - The category keywords in `categories.ts` are fixed. An editable dictionary (stored per project) belongs in Phase 6 or 7.
 - Pull requests are left out of the map, because GitHub PRs can't have a parent issue.
+- The structure score is modularity, and modularity likes few large groups: splitting an epic always lowers it a little, even when the split is right.

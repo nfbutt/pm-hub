@@ -5,6 +5,7 @@ import cytoscape, { type Core, type ElementDefinition, type NodeSingular, type P
 import fcose from "cytoscape-fcose";
 import { categoryName } from "../../model/epicmap/categories";
 import type { EpicMapModel } from "../../model/epicmap";
+import { lensColours, lensValue, type Lens, type LensNode } from "../../model/epicmap/lens";
 
 cytoscape.use(fcose);
 
@@ -20,7 +21,7 @@ export interface CanvasEvents {
 }
 
 export interface MapCanvas {
-  update: (model: EpicMapModel, readOnly: boolean) => void;
+  update: (model: EpicMapModel, readOnly: boolean, lens?: Lens) => void;
   fit: () => void;
   relayout: () => void;
   focus: (key: string) => void;
@@ -46,22 +47,27 @@ function palette(el: HTMLElement) {
   };
 }
 
-function elements(model: EpicMapModel): ElementDefinition[] {
+function elements(model: EpicMapModel, lens: Lens): ElementDefinition[] {
   const out: ElementDefinition[] = [];
+  // The colour of an item is its group under the lens: its category, or whatever the
+  // lens groups by instead.
+  const colours = lens === "category" ? null
+    : lensColours([...model.epics.map(e => lensValue(lens, e)), ...model.tasks.map(t => lensValue(lens, t))]);
+  const catOf = (node: LensNode) => (lens === "category" ? node.category : colours!.get(lensValue(lens, node)) ?? "other");
   for (const e of model.epics) {
     const health = e.health === null ? "no tasks" : `health ${e.health}`;
-    out.push({ group: "nodes", data: { id: epicId(e.key), kind: "epic", cat: e.category, label: `${clip(e.title, 40)}\n${health} · ${e.taskKeys.length} task${e.taskKeys.length === 1 ? "" : "s"}` } });
+    out.push({ group: "nodes", data: { id: epicId(e.key), kind: "epic", cat: catOf(e), group: lensValue(lens, e), label: `${clip(e.title, 40)}\n${health} · ${e.taskKeys.length} task${e.taskKeys.length === 1 ? "" : "s"}` } });
   }
-  out.push({ group: "nodes", data: { id: TRAY, kind: "tray", cat: "other", label: "No epic\ndrop here to take a task out" } });
+  out.push({ group: "nodes", data: { id: TRAY, kind: "tray", cat: "other", group: "No epic", label: "No epic\ndrop here to take a task out" } });
   for (const t of model.tasks) {
     out.push({
       group: "nodes", classes: [t.state !== "open" ? "closed" : "", t.misfit ? "misfit" : ""].filter(Boolean).join(" "),
-      data: { id: taskId(t.key), parent: t.epicKey ? epicId(t.epicKey) : TRAY, kind: "task", cat: t.category, label: clip(t.title, 34) },
+      data: { id: taskId(t.key), parent: t.epicKey ? epicId(t.epicKey) : TRAY, kind: "task", cat: catOf(t), group: lensValue(lens, t), label: clip(t.title, 34) },
     });
   }
   model.gaps.forEach(g => {
     const id = `g:${g.category}`;
-    out.push({ group: "nodes", data: { id, kind: "ghost", cat: g.category, label: `No ${categoryName(g.category)} epic\n${g.taskKeys.length} tasks · click to create` } });
+    out.push({ group: "nodes", data: { id, kind: "ghost", cat: g.category, group: categoryName(g.category), label: `No ${categoryName(g.category)} epic\n${g.taskKeys.length} tasks · click to create` } });
     for (const k of g.taskKeys.slice(0, 6)) out.push({ group: "edges", classes: "gapline", data: { id: `gl:${g.category}:${k}`, source: id, target: taskId(k) } });
   });
   for (const o of model.overlaps.slice(0, 10)) {
@@ -97,7 +103,7 @@ export function mountCanvas(container: HTMLElement, on: CanvasEvents): MapCanvas
       { selector: 'node[kind="task"]:grabbed', style: { width: 26, height: 26, "border-color": c.accent, "border-width": 3, "z-index": 999 } },
       { selector: 'node[kind="epic"], node[kind="tray"], node[kind="ghost"]', style: {
         shape: "round-rectangle", "corner-radius": "28px", padding: "22px", label: "data(label)", "text-valign": "top", "text-halign": "center",
-        "font-size": 17, "font-weight": 700, "text-margin-y": -8, "text-max-width": "240px", "line-height": 1.35,
+        "font-size": 17, "font-weight": 700, "text-margin-y": -8, "text-max-width": "240px", "line-height": 1.35, "min-zoomed-font-size": 11,
       } },
       { selector: 'node[kind="epic"]', style: {
         "background-color": (n: NodeSingular) => c.cat(n.data("cat")), "background-opacity": 0.1,
@@ -191,9 +197,9 @@ export function mountCanvas(container: HTMLElement, on: CanvasEvents): MapCanvas
 
   let first = true;
   return {
-    update(model, ro) {
+    update(model, ro, lens: Lens = "category") {
       readOnly = ro;
-      const next = elements(model);
+      const next = elements(model, lens);
       const ids = new Set(next.map(e => e.data.id!));
       let structural = false;
       cy.batch(() => {

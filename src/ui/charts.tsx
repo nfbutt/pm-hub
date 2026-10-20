@@ -55,7 +55,7 @@ export function LineChart({ x, series, height = 240, label, markers = [] }: {
           <text x={L - 6} y={py(t) + 3} textAnchor="end" className="tick">{t}</text>
         </g>
       ))}
-      {x.map((d, i) => i % every === 0 ? <text key={d} x={px(i)} y={H - 8} textAnchor="middle" className="tick">{shortDate(d)}</text> : null)}
+      {x.map((d, i) => i % every === 0 ? <text key={i} x={px(i)} y={H - 8} textAnchor="middle" className="tick">{shortDate(d)}</text> : null)}
       {markers.map(mk => (
         <g key={mk.label}>
           <line x1={px(mk.at)} x2={px(mk.at)} y1={T} y2={H - B} stroke={mk.color} strokeDasharray="4 3" strokeWidth={1.5} />

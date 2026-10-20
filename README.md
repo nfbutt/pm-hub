@@ -22,7 +22,7 @@ Pick one of your GitHub Projects. pm-hub reads its items, field values, mileston
 | Burn-up | Scope and completed work per week, throughput, projected finish |
 | Release confidence | Monte Carlo forecast: chance of hitting each due date, plus the dates half and 85% of runs finish by |
 | Dependencies | Graph of blocked-by and parent links, critical path, cycles |
-| Epic Map | Epics as bubbles of tasks: overlaps, misplaced tasks, kinds of work with no epic, a structure score; drag tasks between epics; a deck of suggestions you can accept or turn down |
+| Epic Map | Epics as bubbles of tasks: overlaps, misplaced tasks, kinds of work with no epic, a structure score; drag tasks between epics; a deck of suggestions you can accept or turn down; meeting mode, a timelapse of the plan and goals to work towards |
 | Settings | Change how dates, epics, swimlanes, releases and priority are read; fiscal-year quarters |
 | Review | Every pending change with before and after, checked against GitHub, then applied |
 

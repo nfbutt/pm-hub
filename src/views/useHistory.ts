@@ -3,7 +3,7 @@ import type { GitHubClient } from "../github/client";
 import { VIEWER_LOGIN } from "../github/queries";
 import type { Baseline } from "../model/diff";
 import {
-  historyStore, readHistoryConfig, writeHistoryConfig, type BaselineMeta, type ChangeRecord, type HistoryConfig,
+  historyStore, readHistoryConfig, writeHistoryConfig, type BaselineMeta, type ChangeRecord, type HistoryConfig, type QuestRecord,
 } from "../store/history";
 
 export interface HistoryState {
@@ -11,6 +11,7 @@ export interface HistoryState {
   setConfig: (c: HistoryConfig) => void;
   baselines: BaselineMeta[];
   changes: ChangeRecord[];
+  quests: QuestRecord[];
   loading: boolean;
   error: string | null;
   author: string | null;
@@ -18,12 +19,14 @@ export interface HistoryState {
   saveBaseline: (b: Baseline) => Promise<void>;
   readBaseline: (id: string) => Promise<Baseline>;
   saveChange: (c: ChangeRecord) => Promise<void>;
+  saveQuest: (q: QuestRecord) => Promise<void>;
 }
 
 export function useHistory(owner: string, number: number, client: GitHubClient | null): HistoryState {
   const [config, setConfigState] = useState<HistoryConfig>({ mode: "local" });
   const [baselines, setBaselines] = useState<BaselineMeta[]>([]);
   const [changes, setChanges] = useState<ChangeRecord[]>([]);
+  const [quests, setQuests] = useState<QuestRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [author, setAuthor] = useState<string | null>(null);
@@ -34,18 +37,19 @@ export function useHistory(owner: string, number: number, client: GitHubClient |
 
   const reload = useCallback(() => {
     setLoading(true); setError(null);
-    Promise.all([store.listBaselines(), store.listChanges(30)])
-      .then(([b, c]) => { setBaselines(b); setChanges(c); })
+    Promise.all([store.listBaselines(), store.listChanges(30), store.listQuests()])
+      .then(([b, c, q]) => { setBaselines(b); setChanges(c); setQuests(q); })
       .catch(e => setError(e instanceof Error ? e.message : "Couldn't read the plan history."))
       .finally(() => setLoading(false));
   }, [store]);
   useEffect(reload, [reload]);
 
   return {
-    config, baselines, changes, loading, error, author, reload,
+    config, baselines, changes, quests, loading, error, author, reload,
     setConfig: c => { setConfigState(c); void writeHistoryConfig(owner, number, c); },
     saveBaseline: async b => { await store.saveBaseline(b); reload(); },
     readBaseline: id => store.readBaseline(id),
     saveChange: async c => { await store.saveChange(c); reload(); },
+    saveQuest: async q => { await store.saveQuests(q); reload(); },
   };
 }
