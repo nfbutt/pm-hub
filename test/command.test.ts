@@ -7,6 +7,7 @@ import { detectMapping } from "../src/model/mapping";
 import { findTargets, parsePhrase } from "../src/model/command/targets";
 import { fillSlot, parseIntent, parseShift, slotPhrase } from "../src/model/command/intent";
 import { intentOps, mergeEpics } from "../src/model/command/ops";
+import { buildSchedule } from "../src/model/schedule";
 
 const f = makeFixture("2026-10-19");
 const project = normalizeProject(DEMO_OWNER, f.meta, f.items, "2026-10-19T12:00:00Z");
@@ -115,7 +116,7 @@ describe("understanding what is being asked", () => {
 describe("turning a command into changes", () => {
   it("moves the dates of the item it names", () => {
     const parsed = parseIntent("move the Offline mode epic two weeks later")!;
-    const result = intentOps(project, mapping, parsed.intent);
+    const result = intentOps(project, mapping, parsed.intent, buildSchedule(project, mapping));
     expect(result.ops.length).toBe(1);
     expect(result.ops[0]!.kind).toBe("setDates");
     expect(result.label).toContain("Offline mode");
@@ -123,7 +124,7 @@ describe("turning a command into changes", () => {
 
   it("asks which item when the phrase does not say", () => {
     const parsed = parseIntent("merge the offline mode epic into")!;
-    const result = intentOps(project, mapping, parsed.intent);
+    const result = intentOps(project, mapping, parsed.intent, buildSchedule(project, mapping));
     expect(result.ops).toHaveLength(0);
     expect(result.question).toContain("which epic");
   });
@@ -146,7 +147,7 @@ describe("turning a command into changes", () => {
 
   it("makes an item wait for another", () => {
     const parsed = parseIntent("make the Offline mode story blocked by the Mobile notifications story")!;
-    const result = intentOps(project, mapping, parsed.intent);
+    const result = intentOps(project, mapping, parsed.intent, buildSchedule(project, mapping));
     expect(result.ops[0]?.kind).toBe("addBlockedBy");
   });
 
@@ -155,7 +156,7 @@ describe("turning a command into changes", () => {
     const b = title("Mobile notifications");
     a.blockedBy = [{ key: b.key, open: true }];
     const parsed = parseIntent("make the Mobile notifications story blocked by the Offline mode story")!;
-    const result = intentOps(project, mapping, parsed.intent);
+    const result = intentOps(project, mapping, parsed.intent, buildSchedule(project, mapping));
     expect(result.ops).toHaveLength(0);
     expect(result.question).toContain("already waits");
   });
@@ -166,7 +167,7 @@ describe("filling in what a sentence left out", () => {
     const intent = parseIntent("merge the offline mode epic into")!.intent;
     const filled = fillSlot(intent, "into", "mobile notifications");
     expect(filled).toEqual({ action: "merge", target: "offline mode", into: "mobile notifications" });
-    const result = intentOps(project, mapping, filled);
+    const result = intentOps(project, mapping, filled, buildSchedule(project, mapping));
     expect(result.ops.length).toBeGreaterThan(0);
     expect(result.label).toContain("Offline mode");
   });

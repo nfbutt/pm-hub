@@ -21,6 +21,7 @@ import { Roadmap } from "./Roadmap";
 import { Planner } from "./Planner";
 import { GlobalMic } from "./voice/GlobalMic";
 import { say } from "../ai/voice";
+import { useDictation } from "./voice/useDictation";
 import { Overview } from "./Overview";
 import { Progress } from "./Progress";
 import { Schedule } from "./Schedule";
@@ -63,6 +64,9 @@ export function ProjectScreen({ source, view, onSignOut }: { source: Source; vie
   const [githubOnly, setGithubOnly] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [menuOpen, setMenuOpen] = useState(false);
+  const [prefs, setPrefsState] = useState<Prefs>(readPrefs);
+  // What you said goes into the command box, so speaking and typing are one thing.
+  const [command, setCommand] = useState("");
   const history = useHistory(owner, number, source.kind === "github" ? source.client : null);
   const [compare, setCompare] = useState<{ id: string; baseline: Baseline } | null>(null);
   const compareTo = (id: string | null, b?: Baseline | null) => {
@@ -75,12 +79,17 @@ export function ProjectScreen({ source, view, onSignOut }: { source: Source; vie
   const draft = !githubOnly && cs.applied ? cs.applied.local : emptyDraft();
   const editor = !githubOnly && cs.ready && cs.editor ? cs.editor : undefined;
 
-  // Keyboard: Ctrl/Cmd+K command menu, Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y) undo and redo,
-  // [ and ] shift the selection a week, Esc clears it. Ignored while typing in a field.
+  // Push to talk: hold the key, speak, let go. It works while you are typing, because it
+  // is checked before the "you are typing in a field" rule.
+  const dictation = useDictation(prefs.local, text => { setCommand(text); setMenuOpen(true); });
+  // Keyboard: Ctrl/Cmd+K command menu, Ctrl+Shift+Space push to talk, Ctrl+Z / Ctrl+Shift+Z
+  // (or Ctrl+Y) undo and redo, [ and ] shift the selection a week, Esc clears it. Ignored
+  // while typing in a field.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase();
       if ((e.ctrlKey || e.metaKey) && k === "k") { e.preventDefault(); setMenuOpen(o => !o); return; }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.code === "Space") { e.preventDefault(); dictation.toggle(); return; }
       const el = e.target as HTMLElement | null;
       if (menuOpen || (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)))) return;
       if (e.ctrlKey || e.metaKey) {
@@ -106,8 +115,9 @@ export function ProjectScreen({ source, view, onSignOut }: { source: Source; vie
     };
     addEventListener("keydown", onKey);
     return () => removeEventListener("keydown", onKey);
-  }, [cs, githubOnly, menuOpen, selected, editor, mapping]);
-  const [prefs, setPrefsState] = useState<Prefs>(readPrefs);
+  }, [cs, githubOnly, menuOpen, selected, editor, mapping, dictation]);
+  // Push to talk: hold the key, speak, let go. It works while you are typing, because it
+  // is checked before the "you are typing in a field" rule.
   // The dates as they stand, draft included: the keyboard shift moves from these.
   const schedule = useMemo(() => (shown && mapping ? buildSchedule(shown, mapping, draft) : null), [shown, mapping, draft]);
   const setPrefs = (p: Prefs) => { setPrefsState(p); writePrefs(p); };
@@ -204,7 +214,7 @@ export function ProjectScreen({ source, view, onSignOut }: { source: Source; vie
           <CommandMenu project={shown} mapping={mapping} editor={editor} selected={selected} onSelect={setSelected}
             views={TABS} go={v => { location.hash = hrefFor(routeFor(v as ViewId)); }}
             undo={cs.undo} redo={cs.redo} toggleGithubOnly={() => setGithubOnly(g => !g)} onClose={() => setMenuOpen(false)}
-            local={prefs.local} speak={say} />
+            local={prefs.local} speak={say} value={command} onQuery={setCommand} schedule={schedule ?? undefined} />
         )}
       </main>
     </>

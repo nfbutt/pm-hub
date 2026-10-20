@@ -3,10 +3,12 @@
 // same way, and it is checked against GitHub the same way before anything is written.
 import {
   addBlocker, laneOptions, milestoneOptions, moveToParent, newItem, peopleOptions,
-  removeBlocker, setAssignees, setLane, setRelease, setState, shiftDates,
+  removeBlocker, setAssignees, setDatesWithDependents, setLane, setRelease, setState, shiftDates,
 } from "../edits";
 import { isEpic, type Mapping } from "../mapping";
 import type { Item, Project } from "../normalize";
+import { addDays } from "../calendar";
+import { daysBetween, type Schedule } from "../schedule";
 import type { Op } from "../ops";
 import type { Intent } from "./intent";
 import { findTargets, type Target } from "./targets";
@@ -58,7 +60,7 @@ function resolve(project: Project, mapping: Mapping, phrase: string, question: s
  * The changes a command makes. When the phrase was not enough, the result carries the
  * question to ask instead of a guess.
  */
-export function intentOps(project: Project, mapping: Mapping, intent: Intent): CommandResult {
+export function intentOps(project: Project, mapping: Mapping, intent: Intent, schedule: Schedule): CommandResult {
   const byKey = new Map(project.items.map(i => [i.key, i]));
   switch (intent.action) {
     case "undo":
@@ -74,6 +76,18 @@ export function intentOps(project: Project, mapping: Mapping, intent: Intent): C
         ops, target,
         label: `Moved ${item.title} ${days > 0 ? `${days} days later` : `${Math.abs(days)} days earlier`}`,
       };
+    }
+
+    case "setDate": {
+      const { target, question } = resolve(project, mapping, intent.target, "Which item?");
+      if (!target) return { ops: [], label: "Set a date", question };
+      const item = byKey.get(target.key)!;
+      const from = schedule.bars.get(item.key);
+      const end = intent.date;
+      // The end goes where they said; the start keeps the length it had.
+      const start = from ? addDays(end, -(daysBetween(from.start, from.end))) : end;
+      const ops = setDatesWithDependents(project, mapping, item.key, start, end, "on-overlap");
+      return { ops, target, label: `Moved ${item.title} to ${end}` };
     }
 
     case "release": {

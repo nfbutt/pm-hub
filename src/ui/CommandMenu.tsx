@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { buildSchedule, emptyDraft, type Schedule } from "../model/schedule";
 import {
   addBlocker, epicOptions, laneOptions, milestoneOptions, moveToParent, newItem, setLane, setMilestone, setOption, setState, shiftDates,
 } from "../model/edits";
@@ -7,6 +8,8 @@ import type { Item, Project } from "../model/normalize";
 import type { Op } from "../model/ops";
 import type { Editor } from "../views/useChangeSet";
 import { findTargets } from "../model/command/targets";
+import { candidateKeys, readPhrase } from "../model/command/phrase";
+import { knownValues } from "../model/command/ops";
 import { fillSlot, parseIntent, slotPhrase, type Intent, type Slot } from "../model/command/intent";
 import { intentOps } from "../model/command/ops";
 import { useDictation } from "../views/voice/useDictation";
@@ -28,12 +31,19 @@ interface Props {
   local?: { enabled: boolean; base: string; chatModel: string; embedModel: string; voiceBase?: string; voiceModel?: string };
   /** Says something out loud, so a spoken command can be answered. */
   speak?: (text: string) => void;
+  /** The text in the box, so something else can put words there. */
+  value?: string;
+  onQuery?: (q: string) => void;
+  /** The dates as they stand, for a command that moves something to a day. */
+  schedule?: Schedule;
 }
 
 /** Ctrl/Cmd+K: every edit and navigation, acting on the current selection. */
-export function CommandMenu({ project, mapping, editor, selected, onSelect, views, go, undo, redo, toggleGithubOnly, onClose, local, speak }: Props) {
+export function CommandMenu({ project, mapping, editor, selected, onSelect, views, go, undo, redo, toggleGithubOnly, onClose, local, speak, value, onQuery, schedule }: Props) {
   const [step, setStep] = useState<Step | null>(null);
-  const [query, setQuery] = useState("");
+  const [own, setOwn] = useState("");
+  const query = value ?? own;
+  const setQuery = (q: string): void => { if (value === undefined) setOwn(q); onQuery?.(q); };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { e.preventDefault(); if (step) setStep(null); else onClose(); } };
     addEventListener("keydown", onKey, true);
@@ -49,10 +59,21 @@ export function CommandMenu({ project, mapping, editor, selected, onSelect, view
 
   // The microphone: the words go into the same box, so speaking and typing are one thing.
   const dictation = useDictation(local ?? { enabled: false, base: "", chatModel: "", embedModel: "" },
-    text => setQuery(q => (q ? `${q} ${text}` : text)));
+    text => setQuery(query ? `${query} ${text}` : text));
 
   // What the person typed, read as a sentence: "move the API epic two weeks later".
   const phrase = useMemo(() => (query.trim() && !step ? parseIntent(query) : null), [query, step]);
+  // When the grammar has nothing, a model may read it -- but only a target that exists
+  // and an action that is one of ours is kept.
+  const [guessed, setGuessed] = useState<Intent | null>(null);
+  useEffect(() => {
+    if (!local?.enabled || !query.trim() || step || phrase) { setGuessed(null); return; }
+    const t = setTimeout(() => {
+      void readPhrase(local, query.trim(), candidateKeys(project, mapping, query), knownValues(project, mapping).releases)
+        .then(i => setGuessed(i));
+    }, 700);
+    return () => clearTimeout(t);
+  }, [query, phrase, step, local, project, mapping]);
 
   const actions: { id: string; label: string; hint?: string; pinned?: boolean; run: () => void }[] = [];
   if (editor && n > 0) {
@@ -92,21 +113,22 @@ export function CommandMenu({ project, mapping, editor, selected, onSelect, view
 
   // A sentence, if it is one. A sentence that works sits at the top of the list, whatever
   // else was typed; one that needs to know which item it meant waits at the end.
-  if (phrase) {
-    const result = intentOps(project, mapping, phrase.intent);
+  const said = phrase ?? (guessed ? { intent: guessed, text: query } : null);
+  if (said) {
+    const result = intentOps(project, mapping, said.intent, schedule ?? buildSchedule(project, mapping, emptyDraft()));
     if (result.question) {
-      const slot = phrase.missing?.slot ?? "target";
-      const candidates = findTargets(project, mapping, slotPhrase(phrase.intent, slot), 6);
+      const slot = phrase?.missing?.slot ?? "target";
+      const candidates = findTargets(project, mapping, slotPhrase(said.intent, slot), 6);
       actions.push({
         id: "phrase-ask", label: result.question, hint: query,
-        run: () => setStep({
-          kind: "phrase", title: result.question!, intent: phrase.intent, slot,
+        run: () => { speak?.(result.question!); setStep({
+          kind: "phrase", title: result.question!, intent: said.intent, slot,
           options: candidates.map(c => ({ value: c.title, label: c.title, hint: c.kind === "epic" ? "epic" : undefined })),
-        }),
+        }); },
       });
     } else if (result.ops.length) {
       actions.unshift({
-        id: "phrase-do", label: result.label, hint: "from what you said", pinned: true,
+        id: "phrase-do", label: result.label, hint: phrase ? "from what you said" : "read by the model", pinned: true,
         run: () => { speak?.(result.label); run(result.label, result.ops); },
       });
     }
@@ -136,16 +158,16 @@ export function CommandMenu({ project, mapping, editor, selected, onSelect, view
         )}
         {step?.kind === "list" && <PickList key={step.title} options={step.options} placeholder={`Find ${step.title.toLowerCase()}…`} onPick={step.onPick} />}
         {step?.kind === "text" && <TextStep step={step} />}
-        {step?.kind === "phrase" && <PhraseStep step={step} project={project} mapping={mapping} onDone={run} onSpeak={speak} />}
+        {step?.kind === "phrase" && <PhraseStep step={step} project={project} mapping={mapping} schedule={schedule} onDone={run} onSpeak={speak} />}
       </div>
     </div>
   );
 }
 
 /** Which item did the sentence mean? Then it does it. */
-function PhraseStep({ step, project, mapping, onDone, onSpeak }: {
+function PhraseStep({ step, project, mapping, schedule, onDone, onSpeak }: {
   step: Extract<Step, { kind: "phrase" }>;
-  project: Project; mapping: Mapping;
+  project: Project; mapping: Mapping; schedule?: Schedule;
   onDone: (label: string, ops: Op[]) => void;
   onSpeak?: (text: string) => void;
 }) {
@@ -153,7 +175,7 @@ function PhraseStep({ step, project, mapping, onDone, onSpeak }: {
     <>
       <PickList options={step.options} placeholder="Which one?" onPick={title => {
         const intent = fillSlot(step.intent, step.slot, title);
-        const result = intentOps(project, mapping, intent);
+        const result = intentOps(project, mapping, intent, schedule ?? buildSchedule(project, mapping, emptyDraft()));
         if (result.question) { onSpeak?.(result.question); return; }
         onDone(result.label, result.ops);
       }} />
