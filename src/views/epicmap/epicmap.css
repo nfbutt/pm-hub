@@ -128,3 +128,11 @@
 
 /* the command menu: one surface for typing, saying and choosing */
 .cmdk-mic { display: flex; gap: 8px; align-items: center; padding: 0 2px; font-size: 12px; }
+
+/* comparing two epics */
+.cmp-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+@media (max-width: 900px) { .cmp-columns { grid-template-columns: 1fr; } }
+.cmp-col { min-width: 0; }
+.cmp-col.drop { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.cmp-grip { color: var(--muted); cursor: grab; font-size: 11px; }
+.cmp-col .emap-list li { align-items: baseline; }

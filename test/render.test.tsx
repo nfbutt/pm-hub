@@ -23,6 +23,7 @@ import { MeetingMode } from "../src/views/epicmap/MeetingMode";
 import { Roadmap } from "../src/views/Roadmap";
 import { Review } from "../src/views/Review";
 import { Planner } from "../src/views/Planner";
+import { Compare } from "../src/views/Compare";
 import { BurnUp } from "../src/views/BurnUp";
 import { Confidence } from "../src/views/Confidence";
 import { Progress } from "../src/views/Progress";
@@ -66,6 +67,14 @@ describe("views render with the demo project", () => {
     expect(html).toContain("Roadmap");
     expect(html).toContain("Can this plan work?");
     expect(html).toContain("road-row");
+  });
+
+  it("Compare asks for two epics", () => {
+    const html = renderToString(<Compare project={project} mapping={mapping} />);
+    expect(html).toContain("Compare two epics");
+    expect(html).toContain("First epic");
+    expect(html).toContain("Second epic");
+    expect(html).toContain("Choose two epics to compare");
   });
 
   it("Planner asks what you are building and says what to do next", () => {

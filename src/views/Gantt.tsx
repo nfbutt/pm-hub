@@ -35,9 +35,11 @@ interface Props {
   selected?: Set<string>; onSelect?: (keys: Set<string>) => void;
   /** Saved baselines, and the one drawn as ghost bars (if any). */
   baselines?: BaselineMeta[]; compare?: { id: string; baseline: Baseline } | null; onCompare?: (id: string | null) => void;
+  /** Where the review screen is, so the export can offer to send the changes. */
+  reviewHref?: string;
 }
 
-export function Gantt({ project, mapping, draft, editor, changed, onDiscardAll, prefs, setPrefs, selected = new Set(), onSelect, baselines = [], compare = null, onCompare }: Props) {
+export function Gantt({ project, mapping, draft, editor, changed, onDiscardAll, prefs, setPrefs, selected = new Set(), onSelect, baselines = [], compare = null, onCompare, reviewHref }: Props) {
   const [renaming, setRenaming] = useState<{ key: string; text: string } | null>(null);
   const [addingTo, setAddingTo] = useState<{ key: string; text: string } | null>(null);
   const [link, setLink] = useState<{ from: string; x0: number; y0: number; x: number; y: number } | null>(null);
@@ -492,6 +494,12 @@ export function Gantt({ project, mapping, draft, editor, changed, onDiscardAll, 
           <CopyBox id="x-md" label="Markdown" text={rowsToMarkdown(groups)} />
           <CopyBox id="x-plan-csv" label="Whole plan as CSV" text={planToCsv(project, mapping, schedule)} />
           <CopyBox id="x-plan-md" label="Whole plan as Markdown" text={planToMarkdown(project, mapping, schedule)} />
+          {reviewHref && (
+            <p className="muted" style={{ fontSize: 12 }}>
+              To put this arrangement into GitHub, <a href={reviewHref}>review the changes first</a> — you will see every one
+              of them, and the exact calls, before anything is written.
+            </p>
+          )}
         </Modal>
       )}
     </div>
