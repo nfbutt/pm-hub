@@ -5,9 +5,18 @@
 // The grammar is tried first, because a model's command execution tops out around
 // three-quarters success and its mistakes are missing and wrong arguments. So: parse what
 // can be parsed, ask about what is missing, and never invent it.
+import { parseDate } from "./dates";
+
+/** Today, for the date expressions. Set once per session. */
+let TODAY = new Date().toISOString().slice(0, 10);
+/** Tells the parser which day "today" is. */
+export function setToday(day: string) { TODAY = day; }
+
 export type Intent =
   /** Move an item's dates by a number of days. */
   | { action: "shift"; target: string; days: number }
+  /** Put an item's end date on a day someone named. */
+  | { action: "setDate"; target: string; date: string }
   /** Put an item in a release. */
   | { action: "release"; target: string; value: string }
   /** Move an item to another swimlane. */
@@ -229,6 +238,21 @@ export function parseIntent(phrase: string): ParsedCommand | null {
         const value = name || restWords.join(" ");
         return { intent: { action: "lane", target, value }, missing: target ? undefined : { slot: "target", question: "Which item?" }, text };
       }
+    }
+  }
+
+  // "move X to the 15th" / "put X on next Friday"
+  const named = parseDate(text, TODAY);
+  if (named && /\b(move|put|set|shift|slide|deadline|finish|end)\b/.test(text)) {
+    const verb = at("move", "put", "set", "shift", "slide");
+    if (verb >= 0) {
+      for (let i = 0; i <= verb; i++) used.add(i);
+      const target = rest();
+      return {
+        intent: { action: "setDate", target, date: named.date },
+        missing: target ? undefined : { slot: "target", question: "Which item?" },
+        text,
+      };
     }
   }
 
