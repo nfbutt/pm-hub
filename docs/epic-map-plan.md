@@ -24,15 +24,16 @@ A model on your own machine (opt-in, localhost only, off by default) can read th
 
 Each phase below is small enough to be one PR. The order is by value, not by effort.
 
-### Phase 10: a working calendar
+### Phase 10: a working calendar — done
 
 **Why.** Bars are drawn on plain calendar days. A plan that runs through a weekend is wrong in a way every reviewer spots, and it quietly lengthens the critical chain — so the float and the "ends on" date are both wrong. The scheduling literature treats non-working days as a first-class input, not a detail.
 
-**What.**
-- `src/model/calendar.ts`: working days (Monday to Friday by default) and a per-project list of holidays.
-- `buildSchedule` and `buildPlan` count working days, not calendar days, when they work out an earliest start, a latest start and a length.
-- The Gantt shades the non-working days behind the bars.
-- Settings: "Working days" and "Holidays" per project, next to the other project settings.
+**What was built.**
+- `src/model/calendar.ts`: the working days of the week, the days that are off whatever the week says, and the arithmetic to count and step over them.
+- The plan engine works in working days: the forward pass starts the next piece of work on a working day, and the backward pass finishes the one before it on the last working day. The dates on the chart do not move — what changes is how long the work really is.
+- `src/model/plan/cpm.ts` carries both lengths: `days` (the calendar span) and `workDays` (the days you can work in).
+- The Gantt shades the days nobody works in.
+- Settings: which days are working days, and the project's holidays.
 
 **Done when.** An epic that spans a weekend is two working days longer on the plan than on the calendar, the critical chain respects it, and the Roadmap's "plan ends" date moves accordingly.
 
@@ -94,6 +95,18 @@ Each phase below is small enough to be one PR. The order is by value, not by eff
 **Done when.** An epic the model has sized shows a range on the map, and the critical chain uses the expected length.
 
 **Not doing.** Storing the estimate as a promise, or re-deriving historical estimates with a changed prompt — historical durations are never re-derived.
+
+### The Gantt, made clearer — done
+
+**Why.** The Gantt drew bars but never said what blocked what, and the "critical path" it had was a longest chain by days rather than a real one. The plan engine (phase 9) computes the real thing, so the chart can show it.
+
+**What was built.**
+- **Dependency arrows.** The links between items are drawn on the chart, measured from the chart (the rows have different heights). The ones on the critical chain are red.
+- **The critical chain on the chart.** The bars that decide when the plan ends are marked.
+- **Place, where the plan says.** The Place button used to drop an undated epic into an arbitrary four weeks from today. It now starts it where the plan says it could start: after the work that blocks it.
+- **An export of the whole plan.** The Gantt's export is the arrangement of the chart. There is now also the whole plan as CSV and Markdown — every epic and story, with what blocks what and which release it is in — which is the export to take somewhere else.
+
+**Not doing.** Deleting the old export: the arrangement of the chart is a different thing from the plan, and both are useful.
 
 ### Later, when there is something to write back
 

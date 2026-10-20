@@ -1,10 +1,12 @@
-import { Fragment, useMemo, useRef, useState, type PointerEvent as RPointerEvent } from "react";
+import { Fragment, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent } from "react";
 import { axis, DAY_PX, SNAP_DAYS, xOf, type Zoom } from "../model/axis";
 import { addDays, priorityOf, type Mapping } from "../model/mapping";
 import type { Item, Project } from "../model/normalize";
-import { rowsToCsv, rowsToMarkdown } from "../model/export";
+import { planToCsv, planToMarkdown, rowsToCsv, rowsToMarkdown } from "../model/export";
 import { buildSchedule, daysBetween, findConflicts, ganttRows, releaseColumns, timeWindow, type Draft, type Row } from "../model/schedule";
 import { buildPlan } from "../model/plan/cpm";
+import { calendarOf, isWorkingDay } from "../model/calendar";
+import { buildGraph } from "../model/deps";
 import { datesOp } from "../model/ops";
 import { addBlocker, moveToParent, newItem, setDatesWithDependents, setTitle } from "../model/edits";
 import type { Prefs } from "../store/cache";
@@ -46,6 +48,7 @@ export function Gantt({ project, mapping, draft, editor, changed, onDiscardAll, 
   const [live, setLive] = useState<{ key: string; start: string; end: string } | null>(null);
   const drag = useRef<{ key: string; mode: "move" | "l" | "r"; x0: number; start: string; end: string; moved: boolean } | null>(null);
   const [rowDrag, setRowDrag] = useState<{ key: string; lane: string; depth: number } | null>(null);
+
   const [dropAt, setDropAt] = useState<{ key: string; above: boolean; into?: boolean } | null>(null);
 
   const zoom: Zoom = prefs.zoom;
@@ -54,8 +57,18 @@ export function Gantt({ project, mapping, draft, editor, changed, onDiscardAll, 
   const schedule = useMemo(() => buildSchedule(project, mapping, effDraft), [project, mapping, effDraft]);
   const original = useMemo(() => buildSchedule(editor?.base ?? project, mapping), [editor?.base, project, mapping]);
   const conflicts = useMemo(() => findConflicts(schedule, effDraft), [schedule, effDraft]);
-  // What is broken about the plan as written, at epic level. The Roadmap says it in full.
-  const planBreaks = useMemo(() => buildPlan(project, mapping, schedule).problems.filter(p => p.severity === 3), [project, mapping, schedule]);
+  // The plan: what is broken, and which epics decide the end date. The Roadmap says it in full.
+  const plan = useMemo(() => buildPlan(project, mapping, schedule, today()), [project, mapping, schedule]);
+  const planBreaks = useMemo(() => plan.problems.filter(p => p.severity === 3), [plan]);
+  const critical = useMemo(() => new Set(plan.critical), [plan]);
+  // Which epic each item belongs to, so an arrow can be coloured by the chain it is on.
+  const epicOf = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const e of plan.epics.values()) for (const k of e.taskKeys) m.set(k, e.key);
+    return m;
+  }, [plan]);
+  // The links between items, for the arrows.
+  const links = useMemo(() => buildGraph(project, mapping, { parentEdges: false, openOnly: false, epicsOnly: false }).edges.filter(e => e.kind === "blocks"), [project, mapping]);
   const scope = useMemo(() => scopeAddedAfterStart(editor?.base ?? project, mapping, original), [editor?.base, project, mapping, original]);
   const then = useMemo(() => new Map((compare?.baseline.items ?? []).map(i => [i.key, i])), [compare]);
   const groups = useMemo(() => ganttRows(project, mapping, schedule, effDraft, { includeClosed: prefs.includeClosed, expanded }, original),
@@ -71,6 +84,49 @@ export function Gantt({ project, mapping, draft, editor, changed, onDiscardAll, 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleBars.map(b => b.start + b.end).join(), releases.length]);
   const ax = useMemo(() => axis(win.start, win.end, prefs.fyStartMonth), [win, prefs.fyStartMonth]);
+
+  // The days nobody works in, shaded behind the bars.
+  const offDays = useMemo(() => {
+    const cal = calendarOf(mapping);
+    const out: { start: string; days: number }[] = [];
+    let run: { start: string; days: number } | null = null;
+    for (let d = win.start; d <= win.end; d = addDays(d, 1)) {
+      if (isWorkingDay(d, cal)) { run = null; continue; }
+      if (run) run.days++;
+      else { run = { start: d, days: 1 }; out.push(run); }
+    }
+    return out;
+  }, [mapping, win]);
+
+  // The arrows between the bars. The rows have different heights, so where each bar
+  // sits is measured from the chart rather than worked out.
+  const board = useRef<HTMLDivElement>(null);
+  const [arrows, setArrows] = useState<{ x1: number; y1: number; x2: number; y2: number; critical: boolean }[]>([]);
+  useLayoutEffect(() => {
+    const el = board.current;
+    if (!el) return;
+    const measure = () => {
+      const box = el.getBoundingClientRect();
+      const out: { x1: number; y1: number; x2: number; y2: number; critical: boolean }[] = [];
+      for (const l of links) {
+        const from = el.querySelector(`[data-key="${l.from}"]`);
+        const to = el.querySelector(`[data-key="${l.to}"]`);
+        if (!from || !to) continue;
+        const a = from.querySelector(".bar, .diamond");
+        const b = to.querySelector(".bar, .diamond");
+        if (!a || !b) continue;
+        const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
+        const onChain = critical.has(epicOf.get(l.from) ?? "") && critical.has(epicOf.get(l.to) ?? "");
+        out.push({ x1: ra.right - box.left, y1: ra.top + ra.height / 2 - box.top, x2: rb.left - box.left, y2: rb.top + rb.height / 2 - box.top, critical: onChain });
+      }
+      setArrows(out);
+    };
+    measure();
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
+    ro?.observe(el);
+    return () => ro?.disconnect();
+  }, [links, groups, epicOf, critical]);
+
   // Release labels sit to the left of their line; skip a label when the previous one would overlap it.
   const labelled = useMemo(() => {
     const out = new Set<string>(); let lastX = -Infinity;
@@ -225,14 +281,31 @@ export function Gantt({ project, mapping, draft, editor, changed, onDiscardAll, 
       ) : (
         <div className="board card">
           <div className="gscroll">
-            <div className="gantt" style={{ width: `calc(var(--lw) + ${width}px)` }} onPointerMove={onBarMove} onPointerUp={onBarUp}
+            <div className="gantt" ref={board} style={{ width: `calc(var(--lw) + ${width}px)` }} onPointerMove={onBarMove} onPointerUp={onBarUp}
               onPointerCancel={() => { drag.current = null; setLive(null); setLink(null); }}>
               <div className="bg" style={{ width }}>
                 {ax.months.map((m, i) => i % 2 ? <div key={m.start} className="band" style={{ left: xOf(win.start, m.start, dayPx), width: m.days * dayPx }} /> : null)}
+                {offDays.map(o => <div key={o.start} className="offday" style={{ left: xOf(win.start, o.start, dayPx), width: o.days * dayPx }} />)}
                 {zoom !== "quarter" && ax.weeks.map(w => <div key={w.start} className="wline" style={{ left: xOf(win.start, w.start, dayPx) }} />)}
                 {releases.map(r => <div key={r.id} className="rline" style={{ left: xOf(win.start, r.due!, dayPx) + dayPx }} />)}
                 {todayX >= 0 && todayX <= width && <div className="today" style={{ left: todayX }} />}
               </div>
+
+              {/* What blocks what. The arrows are measured from the chart, because the
+                  rows have different heights. */}
+              {arrows.length > 0 && (
+                <svg className="gantt-arrows" aria-hidden="true">
+                  <defs>
+                    <marker id="gantt-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto">
+                      <path d="M0,0 L8,4 L0,8 z" fill="currentColor" />
+                    </marker>
+                  </defs>
+                  {arrows.map((a, i) => (
+                    <path key={i} d={`M${a.x1},${a.y1} C${a.x1 + 18},${a.y1} ${a.x2 - 18},${a.y2} ${a.x2},${a.y2}`}
+                      className={`gantt-link ${a.critical ? "critical" : ""}`} markerEnd="url(#gantt-arrow)" />
+                  ))}
+                </svg>
+              )}
 
               <div className="grow ghead">
                 <div className="gl"><span className="eyebrow">Epic</span></div>
@@ -327,7 +400,7 @@ export function Gantt({ project, mapping, draft, editor, changed, onDiscardAll, 
                             <div className="diamond" style={{ left: xOf(win.start, r.bar.end, dayPx), ["--bar" as string]: color }} title={`${r.item.title} · due ${short(r.bar.end)}`}
                               onClick={() => setOpen(r.item.key)} />
                           ) : (
-                            <div className={`bar ${conflictKeys.has(r.item.key) ? "conflict" : ""} ${r.moved ? "moved" : ""} ${r.item.state !== "open" ? "closed" : ""}`}
+                            <div className={`bar ${conflictKeys.has(r.item.key) ? "conflict" : ""} ${r.moved ? "moved" : ""} ${r.item.state !== "open" ? "closed" : ""} ${critical.has(r.item.key) ? "critical" : ""}`}
                               style={{ left: xOf(win.start, r.bar.start, dayPx) + 1, width: Math.max(dayPx, (daysBetween(r.bar.start, r.bar.end) + 1) * dayPx - 2), ["--bar" as string]: color }}
                               title={`${r.item.title} · ${short(r.bar.start)} – ${short(r.bar.end)}${r.item.subIssues ? ` · ${r.item.subIssues.completed}/${r.item.subIssues.total} done` : ""}`}
                               onPointerDown={e => onBarDown(e, r)}>
@@ -375,7 +448,13 @@ export function Gantt({ project, mapping, draft, editor, changed, onDiscardAll, 
                 <span className="eyebrow">No dates ({undated.length})</span>
                 <div className="chips">{undated.map(i => (
                   <span key={i.key} className="chip"><button className="linkish" onClick={() => setOpen(i.key)}>{i.title}</button>
-                    {editor && <button onClick={() => editor.record(`Placed ${i.title} on the chart`, [datesOp(i, mapping, today(), addDays(today(), 27))])}>Place</button>}</span>
+                    {editor && (() => {
+                      // Place it where the plan says it could start: after the work that
+                      // blocks it, and before its release is due.
+                      const start = plan.epics.get(i.key)?.earliest ?? today();
+                      const end = addDays(start, 27);
+                      return <button onClick={() => editor.record(`Placed ${i.title} on the chart`, [datesOp(i, mapping, start, end)])}>Place</button>;
+                    })()}</span>
                 ))}</div>
               </>}
               {parkedItems.length > 0 && <>
@@ -402,6 +481,8 @@ export function Gantt({ project, mapping, draft, editor, changed, onDiscardAll, 
           <p className="muted">Includes your unsaved changes. Nothing is sent to GitHub.</p>
           <CopyBox id="x-csv" label="CSV" text={rowsToCsv(groups)} />
           <CopyBox id="x-md" label="Markdown" text={rowsToMarkdown(groups)} />
+          <CopyBox id="x-plan-csv" label="Whole plan as CSV" text={planToCsv(project, mapping, schedule)} />
+          <CopyBox id="x-plan-md" label="Whole plan as Markdown" text={planToMarkdown(project, mapping, schedule)} />
         </Modal>
       )}
     </div>
