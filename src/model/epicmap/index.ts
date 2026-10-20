@@ -41,6 +41,8 @@ export interface EpicMapModel {
   score: number | null;
   moves: Move[]; gaps: Gap[];
   categories: { id: string; tasks: number; epics: number }[];
+  /** Whether closed work was left out. Suggestions need the same view to predict scores. */
+  openOnly: boolean;
 }
 
 export interface MapOptions { openOnly: boolean }
@@ -173,7 +175,7 @@ export function analyze(p: Project, m: Mapping, opts: MapOptions): EpicMapModel 
     .map(({ category, weight, taskKeys }) => ({ category, weight, taskKeys }))
     .sort((a, b) => b.weight - a.weight);
 
-  return { tasks, epics, overlaps, edges, score, moves, gaps, categories };
+  return { tasks, epics, overlaps, edges, score, moves, gaps, categories, openOnly: opts.openOnly };
 }
 
 /** The structure score if one task moved to another epic (null = out of every epic). */

@@ -37,11 +37,13 @@ describe("views render with the demo project", () => {
     const editor: Editor = { base: project, record: noop, discard: noop, titleOf: k => k };
     const html = renderToString(<EpicMap project={project} mapping={mapping} draft={emptyDraft()} editor={editor} />);
     expect(html).toContain("Structure score");
-    expect(html).toContain("Work with no epic of its own");
-    expect(html).toContain("Create epic");
+    expect(html).toContain("Suggestions");
+    expect(html).toContain("Accept");
+    expect(html).toContain("Snooze");
     const ro = renderToString(<EpicMap project={project} mapping={mapping} draft={emptyDraft()} />);
     expect(ro).toContain("Read-only");
-    expect(ro).not.toContain("Create epic");
+    expect(ro).not.toContain("Accept");
+    expect(ro).not.toContain("Snooze");
   });
 
   it("Overview", () => {

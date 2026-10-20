@@ -1,20 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { analyze, scoreIfMoved, type EpicMapModel } from "../model/epicmap";
 import { categoryName } from "../model/epicmap/categories";
-import { moveToParent, newItem } from "../model/edits";
+import { suggestions, visibleSuggestions, type Suggestion, type SuggestionMemory } from "../model/epicmap/suggest";
+import { moveToParent } from "../model/edits";
 import type { Mapping } from "../model/mapping";
 import type { Project } from "../model/normalize";
 import type { Op } from "../model/ops";
 import { buildSchedule, findConflicts, type Draft } from "../model/schedule";
+import { rejectSuggestion, snoozeSuggestion, readSuggestionMemory } from "../store/epicmap";
 import { ItemDrawer } from "./ItemDrawer";
 import type { Editor } from "./useChangeSet";
 import type { DropTarget, MapCanvas } from "./epicmap/canvas";
+import { Suggestions } from "./epicmap/Suggestions";
 import "./epicmap/epicmap.css";
 
 export function EpicMap({ project, mapping, draft, editor }: { project: Project; mapping: Mapping; draft: Draft; editor?: Editor }) {
   const [openOnly, setOpenOnly] = useState(true);
   const [open, setOpen] = useState<string | null>(null);
   const [hover, setHover] = useState<{ key: string; target: DropTarget } | null>(null);
+  const [memory, setMemory] = useState<SuggestionMemory>({});
+  const [lit, setLit] = useState<string | null>(null);
   const model = useMemo(() => analyze(project, mapping, { openOnly }), [project, mapping, openOnly]);
   // The score when the tab opened, so a meeting can see how far it moved things.
   const [startScore] = useState(() => model.score);
@@ -26,20 +31,26 @@ export function EpicMap({ project, mapping, draft, editor }: { project: Project;
     const item = byKey.get(taskKey);
     if (item) record(to ? `Moved ${item.title} under ${title(to)}` : `Took ${item.title} out of ${title(item.parentKey)}`, moveToParent(project, item, to));
   };
-  const claim = (category: string) => {
-    const gap = model.gaps.find(g => g.category === category);
-    if (!gap || !editor) return;
-    const create = newItem(project, mapping, categoryName(category), { epic: true });
-    const key = create[0]?.kind === "create" ? create[0].key : null;
-    if (!key) return;
-    const moves = gap.taskKeys.flatMap(k => { const it = byKey.get(k); return it ? moveToParent(project, it, key) : []; });
-    record(`New epic ${categoryName(category)} with ${moves.length} task${moves.length === 1 ? "" : "s"}`, [...create, ...moves]);
+
+  // The deck of advice: everything the map thinks is worth doing.
+  const all = useMemo(() => suggestions(model, project, mapping), [model, project, mapping]);
+  const deck = useMemo(() => visibleSuggestions(all, memory), [all, memory]);
+  useEffect(() => { void readSuggestionMemory(project.owner, project.number).then(setMemory); }, [project.owner, project.number]);
+  const accept = (s: Suggestion) => record(`Accepted: ${s.title}`, s.ops);
+  const turnDown = (s: Suggestion) => {
+    setMemory(m => ({ ...m, [s.id]: "rejected" }));
+    void rejectSuggestion(project.owner, project.number, s.id);
+  };
+  const wait = (s: Suggestion) => {
+    const snoozedUntil = new Date(Date.now() + 7 * 86400000).toISOString();
+    setMemory(m => ({ ...m, [s.id]: { snoozedUntil } }));
+    void snoozeSuggestion(project.owner, project.number, s.id);
   };
 
   const box = useRef<HTMLDivElement>(null);
   const canvas = useRef<MapCanvas | null>(null);
-  const latest = useRef({ move, claim, model });
-  latest.current = { move, claim, model };
+  const latest = useRef({ move, model });
+  latest.current = { move, model };
   const [failed, setFailed] = useState(false);
   useEffect(() => {
     let dead = false;
@@ -49,7 +60,12 @@ export function EpicMap({ project, mapping, draft, editor }: { project: Project;
         open: setOpen,
         hover: (key, target) => setHover(target === undefined ? null : { key, target }),
         drop: (key, target) => latest.current.move(key, target),
-        claim: c => latest.current.claim(c),
+        // Clicking a gap bubble points at the suggestion that would fill it.
+        gap: category => {
+          const id = `gap:${category}`;
+          setLit(id);
+          document.getElementById(`emap-suggestion-${id}`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        },
       });
       canvas.current.update(latest.current.model, !editor);
     }, () => setFailed(true));
@@ -100,35 +116,15 @@ export function EpicMap({ project, mapping, draft, editor }: { project: Project;
             <p className="muted">How much related work sits inside the same epic. {sessionDelta !== 0 && <b className={sessionDelta > 0 ? "good" : "bad"}>{sessionDelta > 0 ? "+" : ""}{sessionDelta} since you opened the map</b>}</p>
           </section>
 
-          {model.moves.length > 0 && (
-            <section className="card pad">
-              <h3>Tasks that may be in the wrong place</h3>
-              <ul className="emap-list">
-                {model.moves.slice(0, 6).map(mv => (
-                  <li key={mv.taskKey}>
-                    <button className="emap-link" onClick={() => canvas.current?.focus(mv.taskKey)}>{title(mv.taskKey)}</button>
-                    <span className="muted"> {title(mv.from)} → {title(mv.to)}</span>
-                    {editor && <button className="btn small" onClick={() => move(mv.taskKey, mv.to)}>Move{mv.gain > 0 ? ` (+${mv.gain})` : ""}</button>}
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-
-          {model.gaps.length > 0 && (
-            <section className="card pad">
-              <h3>Work with no epic of its own</h3>
-              <ul className="emap-list">
-                {model.gaps.map(g => (
-                  <li key={g.category}>
-                    <span className="emap-swatch" style={{ background: `var(--cat-${g.category})` }} /> <b>{categoryName(g.category)}</b>
-                    <span className="muted"> {g.taskKeys.length} tasks spread across other epics</span>
-                    {editor && <button className="btn small" onClick={() => claim(g.category)}>Create epic</button>}
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
+          <Suggestions
+            items={deck}
+            onAccept={accept}
+            onReject={turnDown}
+            onSnooze={wait}
+            onFocus={s => canvas.current?.focusMany(s ? s.epics : [])}
+            readOnly={!editor}
+            highlight={lit}
+          />
 
           {model.overlaps.length > 0 && (
             <section className="card pad">

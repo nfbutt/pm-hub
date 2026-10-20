@@ -47,3 +47,18 @@
 .emap-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: -1px; }
 .emap-link { background: none; border: 0; padding: 0; color: var(--accent); font-weight: 600; cursor: pointer; text-align: left; }
 .emap-link:hover { text-decoration: underline; }
+
+/* the deck of suggestions */
+.emap-hint { font-size: 12px; margin-bottom: 8px; }
+.emap-cards { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.emap-card { border: 1px solid var(--line-soft); border-radius: 9px; padding: 9px 11px; display: grid; gap: 5px; }
+.emap-card.lit { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.emap-card-head { display: flex; gap: 6px; align-items: center; }
+.emap-kind { font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
+  background: var(--surface-2); border-radius: 999px; padding: 2px 8px; }
+.emap-gain { margin-left: auto; font-size: 11px; font-weight: 700; font-family: var(--f-mono); color: var(--muted); }
+.emap-gain.up { color: var(--good); }
+.emap-gain.down { color: var(--bad); }
+.emap-card-title { font-weight: 700; font-size: 13px; }
+.emap-card-why { font-size: 12px; }
+.emap-card-actions { display: flex; gap: 6px; flex-wrap: wrap; }

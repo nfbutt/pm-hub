@@ -1,6 +1,6 @@
 # Epic Map: plan for the remaining phases
 
-This is the build plan for the rest of the Epic Map, written for whoever picks it up next. Phase 5 (v1) is done. Phases 6–8 below are still to build.
+This is the build plan for the rest of the Epic Map, written for whoever picks it up next. Phases 5 and 6 are done. Phases 7–8 below are still to build.
 
 ## What exists (phase 5, done)
 
@@ -12,6 +12,18 @@ This is the build plan for the rest of the Epic Map, written for whoever picks i
 | Data | `src/github/queries.ts`, `types.ts`, `src/model/normalize.ts` | The issue/draft `body` is fetched and clipped to 2,000 characters (`Item.body?`). |
 | Demo data | `src/demo/fixture.ts` | `TOPICS` gives each epic its wording. `STRAYS` plants misplaced stories and a security theme no epic owns. |
 | Tests | `test/epicmap.test.ts`, `test/render.test.tsx` | Run with `npm test`. Also run `npm run typecheck` and `npm run build`. |
+
+## What exists (phase 6, done)
+
+| Area | Files | Notes |
+|---|---|---|
+| Suggestions (pure) | `src/model/epicmap/suggest.ts` | `suggestions(model, project, mapping)` returns `Suggestion[]` (`id`, `kind: "move"\|"merge"\|"split"\|"gap"`, `title`, `why`, `gain`, `ops`). Sorted by gain, then gap > merge > move > split. `visibleSuggestions(list, memory, now?)` hides what was rejected or snoozed. `claimOps` is the one place that makes an epic for a gap. |
+| Clustering (pure) | `src/model/epicmap/cluster.ts` | `communities(nodes, edges)` finds groups of similar tasks inside an epic. Greedy modularity gains: start with one group per task, join the pair whose merge helps the modularity most, stop when no merge helps. Deterministic, no dependency. |
+| Rejection memory | `src/store/epicmap.ts` | `emap-rejected:<owner>/<number>` in IndexedDB. `readSuggestionMemory`, `rejectSuggestion`, `snoozeSuggestion` (7 days), `undoSuggestion`. |
+| Deck | `src/views/epicmap/Suggestions.tsx` | Cards with title, why, a score chip and Accept / Reject / Snooze. Hovering a card focuses the epics it is about. Replaces the old "Tasks that may be in the wrong place" and "Work with no epic" sections. |
+| Canvas | `src/views/epicmap/canvas.ts` | `CanvasEvents.gap` (was `claim`): clicking a gap bubble points at the matching card. `focusMany(keys)` fits several epics at once. |
+| Tests | `test/suggest.test.ts` | Merge, split, undo of a merge, clustering and the rejection memory. |
+
 
 ## Rules (don't break these)
 
@@ -25,34 +37,13 @@ This is the build plan for the rest of the Epic Map, written for whoever picks i
 6. **Style.** Short "why" comments, CSS variables from `src/ui/tokens.css` and the `--cat-*` tokens in `epicmap.css`, and check both light and dark themes.
 7. **One PR per phase**, titled `v2 phase N: …`.
 
-## Phase 6: Suggestions and gaps
+## Phase 6: Suggestions and gaps — done
 
-Goal: a deck of suggestion cards you can accept, reject or snooze, covering move, merge, split and create-epic.
+Goal: a deck of suggestion cards you can accept, reject or snooze, covering move, merge, split and create-epic. Built as described above. Two notes for whoever picks it up:
 
-1. **`src/model/epicmap/suggest.ts`**, exporting `suggestions(model, project, mapping): Suggestion[]`. Each suggestion is `{ id, kind: "move"|"merge"|"split"|"gap", title, why, gain, ops: Op[] }`, where `id` is stable (e.g. `merge:<a>|<b>`).
-   - **move:** taken from `model.moves`. The ops are `moveToParent`.
-   - **merge:** for overlaps with `score >= 0.35`.
-     - The survivor is the larger epic.
-     - Ops: `moveToParent` for every child of the other epic, then `{kind:"archive", key}` for the emptied epic.
-     - `gain` = the score after applying the ops, minus the score now. Compute it with `applyOps` and `analyze`.
-   - **split:** for epics with ≥ 6 tasks.
-     - Run community detection on the epic's own sub-graph (its tasks and their edges in `model.edges`). Either add `graphology` + `graphology-communities-louvain`, or write a small label-propagation function; label propagation is enough at this size.
-     - Only suggest a split when there are ≥ 2 communities of ≥ 3 tasks each.
-     - Ops: `splitItem(project, mapping, epic, "<epic title> (part 2)", keysOfSecondCommunity)`.
-   - **gap:** taken from `model.gaps`. Use the same ops as `claim` in `EpicMap.tsx`; move that code into `suggest.ts` and reuse it.
-   - **Sort order:** by `gain`, highest first, then by kind priority: gap > merge > move > split.
-2. **Rejection memory: `src/store/epicmap.ts`**, using `idb-keyval` with keys like `emap-rejected:<owner>/<number>`.
-   - Store a `Record<suggestionId, "rejected" | {snoozedUntil: iso}>`.
-   - Snooze lasts 7 days.
-3. **UI: `src/views/epicmap/Suggestions.tsx`** replaces the "Tasks that may be in the wrong place" and "Work with no epic" sections.
-   - Each card: title, why, a `+gain` chip, and Accept / Reject / Snooze buttons.
-   - Hovering a card calls `canvas.focus(...)` on the epics involved.
-4. **Canvas:** clicking a ghost node opens the matching gap card. Don't create the epic directly; that is today's `claim`.
-5. **Tests:**
-   - merge is suggested for two near-identical synthetic epics;
-   - split finds two clusters in a synthetic epic built from two topics;
-   - accepted merge ops undo cleanly (`applyOps` on `ops` and then on `ops.map(inverse).reverse()` gives the original parents);
-   - rejected ids are filtered out.
+- The clustering is a greedy modularity pass (`src/model/epicmap/cluster.ts`), not label propagation: label propagation collapses to one group too often on a graph this small, and the plan's own test (two topics in one epic) needs the two groups to survive.
+- Splitting an epic always lowers the structure score, because modularity likes few large groups. The card says so honestly (`−6 score`) instead of pretending the split is a win.
+
 
 ## Phase 7: Local Qwen (optional, opt-in)
 
