@@ -15,7 +15,8 @@ export interface CanvasEvents {
   open: (key: string) => void;
   hover: (taskKey: string, target: DropTarget) => void;
   drop: (taskKey: string, target: string | null) => void;
-  claim: (category: string) => void;
+  /** A gap bubble was clicked: show the suggestion that would fill it. */
+  gap: (category: string) => void;
 }
 
 export interface MapCanvas {
@@ -23,6 +24,8 @@ export interface MapCanvas {
   fit: () => void;
   relayout: () => void;
   focus: (key: string) => void;
+  /** Focuses several epics at once, e.g. the two sides of a merge. */
+  focusMany: (keys: string[]) => void;
   destroy: () => void;
 }
 
@@ -184,7 +187,7 @@ export function mountCanvas(container: HTMLElement, on: CanvasEvents): MapCanvas
   cy.on("mouseout", 'node[kind="task"]', () => { cy.$(".lit").removeClass("lit"); cy.$(".dim").removeClass("dim"); });
 
   cy.on("tap", 'node[kind="task"], node[kind="epic"]', ev => on.open(keyOf((ev.target as NodeSingular).id())));
-  cy.on("tap", 'node[kind="ghost"]', ev => on.claim((ev.target as NodeSingular).id().slice(2)));
+  cy.on("tap", 'node[kind="ghost"]', ev => on.gap((ev.target as NodeSingular).id().slice(2)));
 
   let first = true;
   return {
@@ -220,13 +223,25 @@ export function mountCanvas(container: HTMLElement, on: CanvasEvents): MapCanvas
     },
     fit: () => cy.animate({ fit: { eles: cy.elements(), padding: 40 } }, { duration: 350 }),
     relayout: () => run(true, true),
-    focus(key) {
+    focus: key => {
       const n = cy.getElementById(epicId(key)).nonempty() ? cy.getElementById(epicId(key)) : cy.getElementById(taskId(key));
       if (n.empty()) return;
       cy.$(".focus").removeClass("focus");
       n.addClass("focus");
       cy.animate({ fit: { eles: n.union(n.children()), padding: 120 } }, { duration: 450, easing: "ease-in-out-cubic" });
       setTimeout(() => n.removeClass("focus"), 1800);
+    },
+    focusMany: keys => {
+      const nodes = cy.collection();
+      for (const k of keys) {
+        const n = cy.getElementById(epicId(k)).nonempty() ? cy.getElementById(epicId(k)) : cy.getElementById(taskId(k));
+        if (!n.empty()) nodes.merge(n);
+      }
+      if (nodes.empty()) return;
+      cy.$(".focus").removeClass("focus");
+      nodes.addClass("focus");
+      cy.animate({ fit: { eles: nodes.union(nodes.children()), padding: 120 } }, { duration: 450, easing: "ease-in-out-cubic" });
+      setTimeout(() => cy.$(".focus").removeClass("focus"), 1800);
     },
     destroy() {
       layout?.stop();
