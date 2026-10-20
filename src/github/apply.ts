@@ -112,8 +112,8 @@ export function translate(op: Op, r: Resolver): Call[] {
       return [call(ADD_BLOCKED_BY, { issueId: r.contentId(op.key), blockingIssueId: r.contentId(op.blocker) })];
     case "removeBlockedBy":
       return [call(REMOVE_BLOCKED_BY, { issueId: r.contentId(op.key), blockingIssueId: r.contentId(op.blocker) })];
-    case "archive": return [call(ARCHIVE_ITEM, { projectId, itemId: r.itemId(op.key) })];
-    case "unarchive": return [call(UNARCHIVE_ITEM, { projectId, itemId: r.itemId(op.key) })];
+    case "archive": return [call(ARCHIVE_ITEM, { projectId, itemId: op.itemId ?? r.itemId(op.key) })];
+    case "unarchive": return [call(UNARCHIVE_ITEM, { projectId, itemId: op.itemId ?? r.itemId(op.key) })];
     case "create": return []; // run-time only: see execute()
     case "park": case "reorder": return [];
   }
@@ -164,6 +164,9 @@ const sameSet = (a: string[], b: string[]) => norm([...a].sort()) === norm([...b
 /** Compares a change's "before" with what GitHub has now. */
 export function checkStep(op: Op, now: Item | undefined): { status: "ready" | "conflict" | "already"; theirs?: string } {
   if (isNewKey("key" in op ? op.key : "")) return { status: "ready" };
+  // An item that was taken out of the project is not in the project any more, so the
+  // rollback carries the id GitHub knows it by. It is still there, so it can go back.
+  if (op.kind === "unarchive" && op.itemId) return { status: "ready" };
   if (!now) return op.kind === "archive" ? { status: "already" } : { status: "conflict", theirs: "removed from the project" };
   const verdict = (matchesBefore: boolean, matchesAfter: boolean, theirs: string) =>
     matchesAfter ? { status: "already" as const } : matchesBefore ? { status: "ready" as const } : { status: "conflict" as const, theirs };
@@ -183,6 +186,8 @@ export function checkStep(op: Op, now: Item | undefined): { status: "ready" | "c
     case "setAssignees": return verdict(sameSet(now.assignees, op.before), sameSet(now.assignees, op.after), `owners are ${now.assignees.join(", ") || "nobody"}`);
     case "addBlockedBy": return now.blockedBy.some(b => b.key === op.blocker) ? { status: "already" } : { status: "ready" };
     case "removeBlockedBy": return now.blockedBy.some(b => b.key === op.blocker) ? { status: "ready" } : { status: "already" };
+    case "archive": return now.archived ? { status: "already" } : { status: "ready" };
+    case "unarchive": return { status: "ready" };
     default: return { status: "ready" };
   }
 }
@@ -199,14 +204,29 @@ export function involvedKeys(ops: Op[]): string[] {
   return [...keys].filter(k => !isNewKey(k));
 }
 
-/** Re-reads the affected items from GitHub. Returns them keyed by item key. */
-export async function fetchCurrent(client: GitHubClient, base: Project, keys: string[]): Promise<Map<string, Item>> {
-  const ids = keys.map(k => base.items.find(i => i.key === k)?.id).filter((id): id is string => !!id && !isNewKey(id));
+/**
+ * Re-reads the affected items from GitHub. Returns them keyed by item key.
+ * Items that were taken out of the project are included: they still exist on GitHub and a
+ * rollback may have to put them back, so their ids are fetched by the ids the rollback
+ * carries.
+ */
+export async function fetchCurrent(client: GitHubClient, base: Project, keys: string[], extra: { key: string; id: string }[] = []): Promise<Map<string, Item>> {
+  const wanted = new Map<string, string>();
+  for (const k of keys) { const id = base.items.find(i => i.key === k)?.id; if (id) wanted.set(k, id); }
+  for (const e of extra) wanted.set(e.key, e.id);
+  const ids = [...new Set(wanted.values())];
   const out = new Map<string, Item>();
   for (let i = 0; i < ids.length; i += 50) {
     const data = await client.query<{ nodes: (RawItem | null)[] }>(ITEMS_BY_ID, { ids: ids.slice(i, i + 50) });
-    for (const raw of data.nodes) if (raw && "fieldValues" in raw) { const item = normalizeItem(raw); if (!item.archived) out.set(item.key, item); }
+    for (const raw of data.nodes) if (raw && "fieldValues" in raw) { const item = normalizeItem(raw); out.set(item.key, item); }
   }
+  return out;
+}
+
+/** Items taken out of the project: their ids have to be fetched to be addressed. */
+export function archivedIds(ops: Op[]): { key: string; id: string }[] {
+  const out: { key: string; id: string }[] = [];
+  for (const op of ops) if ((op.kind === "archive" || op.kind === "unarchive") && op.itemId) out.push({ key: op.key, id: op.itemId });
   return out;
 }
 

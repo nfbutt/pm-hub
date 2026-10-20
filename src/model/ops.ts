@@ -23,8 +23,8 @@ export type Op =
   | { kind: "addBlockedBy"; key: string; blocker: string }
   | { kind: "removeBlockedBy"; key: string; blocker: string }
   | { kind: "create"; key: string; item: NewItem }
-  | { kind: "archive"; key: string }
-  | { kind: "unarchive"; key: string }
+  | { kind: "archive"; key: string; itemId?: string }
+  | { kind: "unarchive"; key: string; itemId?: string }
   // Local only: never written to GitHub.
   | { kind: "park"; key: string; before: boolean; after: boolean }
   | { kind: "reorder"; lane: string; before: string[]; after: string[] };
@@ -154,6 +154,26 @@ export function inverse(op: Op): Op {
   }
 }
 
+/**
+ * The ops that undo a whole list, last change first.
+ *
+ * A created item is not merely taken out of the project: GitHub cannot undo a creation, so
+ * the issue is closed as well and stays in the repository, closed. Anything else is undone
+ * by its own inverse.
+ */
+export function inverseOps(ops: Op[]): Op[] {
+  const out: Op[] = [];
+  for (const op of [...ops].reverse()) {
+    if (op.kind === "create") {
+      out.push({ kind: "setState", key: op.key, before: { state: "open", reason: null }, after: { state: "closed", reason: "NOT_PLANNED" } });
+      out.push({ kind: "archive", key: op.key });
+      continue;
+    }
+    out.push(inverse(op));
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------- net changes
 
 /** What an op edits. Ops on the same slot fold together into one net change. */
@@ -176,28 +196,37 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
  * History keeps every step (so undo is precise); the counter and review use this.
  */
 export function netOps(ops: Op[]): Op[] {
+  return foldOps(ops.map(op => ({ change: null, op }))).map(e => e.op);
+}
+
+/**
+ * The same folding, but each surviving op keeps the change it came from, so the review
+ * screen can show a change of forty items as one group instead of forty.
+ */
+export function foldOps(entries: { change: Change | null; op: Op }[]): { change: Change | null; op: Op }[] {
   const order: string[] = [];
-  const bySlot = new Map<string, Op>();
+  const bySlot = new Map<string, { change: Change | null; op: Op }>();
   const created = new Set<string>();
-  for (const op of ops) {
+  for (const { change, op } of entries) {
     if (op.kind === "create") created.add(op.key);
     const slot = slotOf(op);
     const prev = bySlot.get(slot);
-    if (!prev) { bySlot.set(slot, op); order.push(slot); continue; }
-    if ("before" in prev && "before" in op) bySlot.set(slot, { ...op, before: prev.before } as Op);
-    else if (prev.kind !== op.kind && (slot.startsWith("blocked:") || slot.startsWith("archive:"))) bySlot.delete(slot); // add then remove
-    else bySlot.set(slot, op);
+    if (!prev) { bySlot.set(slot, { change, op }); order.push(slot); continue; }
+    if ("before" in prev.op && "before" in op) bySlot.set(slot, { change, op: { ...op, before: prev.op.before } as Op });
+    else if (prev.op.kind !== op.kind && (slot.startsWith("blocked:") || slot.startsWith("archive:"))) bySlot.delete(slot); // add then remove
+    else bySlot.set(slot, { change, op });
     if (!order.includes(slot)) order.push(slot);
   }
-  const out: Op[] = [];
+  const out: { change: Change | null; op: Op }[] = [];
   for (const slot of order) {
-    const op = bySlot.get(slot);
-    if (!op) continue;
+    const entry = bySlot.get(slot);
+    if (!entry) continue;
+    const op = entry.op;
     if ("before" in op && same(op.before, op.after)) continue;
     // Edits to an item created in this draft are folded into the create itself on apply;
     // an archived new item simply never gets created.
-    if (op.kind === "archive" && created.has(op.key)) { const i = out.findIndex(o => o.kind === "create" && o.key === op.key); if (i >= 0) out.splice(i, 1); continue; }
-    out.push(op);
+    if (op.kind === "archive" && created.has(op.key)) { const i = out.findIndex(o => o.op.kind === "create" && o.op.key === op.key); if (i >= 0) out.splice(i, 1); continue; }
+    out.push(entry);
   }
   return out;
 }
@@ -251,5 +280,7 @@ export function remapKeys(op: Op, map: Map<string, string>): Op {
   if (op.kind === "setParent") return { ...(out as typeof op), before: op.before && k(op.before), after: op.after && k(op.after) };
   if (op.kind === "addBlockedBy" || op.kind === "removeBlockedBy") return { ...(out as typeof op), blocker: k(op.blocker) };
   if (op.kind === "reorder") return { ...op, before: op.before.map(k), after: op.after.map(k) };
+  // A new item's parent can be another new item, so its key moves too.
+  if (op.kind === "create" && op.item.parentKey) return { ...(out as typeof op), item: { ...op.item, parentKey: k(op.item.parentKey) } };
   return out as Op;
 }

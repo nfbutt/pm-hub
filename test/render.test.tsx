@@ -21,6 +21,7 @@ import { Dependencies, layoutGraph } from "../src/views/Dependencies";
 import { EpicMap } from "../src/views/EpicMap";
 import { MeetingMode } from "../src/views/epicmap/MeetingMode";
 import { Roadmap } from "../src/views/Roadmap";
+import { Review } from "../src/views/Review";
 import { BurnUp } from "../src/views/BurnUp";
 import { Confidence } from "../src/views/Confidence";
 import { Progress } from "../src/views/Progress";
@@ -64,6 +65,20 @@ describe("views render with the demo project", () => {
     expect(html).toContain("Roadmap");
     expect(html).toContain("Can this plan work?");
     expect(html).toContain("road-row");
+  });
+
+  it("Review groups a bulk change into one row", () => {
+    const groups = [{
+      id: "c1", label: "Accepted: Merge two epics",
+      ops: [
+        { kind: "setParent" as const, key: "o/r#1", before: "o/r#2", after: "o/r#3" },
+        { kind: "archive" as const, key: "o/r#2" },
+      ],
+    }];
+    const html = renderToString(<Review base={project} groups={groups} titleOf={k => k} client={null}
+      onApplied={noop} onRecord={noop} refresh={noop} goBack={noop} mapping={mapping} scenario="Default" />);
+    expect(html).toContain("Accepted: Merge two epics");
+    expect(html).toContain("2 changes");
   });
 
   it("Overview", () => {

@@ -38,17 +38,19 @@ Each phase below is small enough to be one PR. The order is by value, not by eff
 
 **Not doing.** Public holidays per country, and resource levelling — that needs capacity data pm-hub does not have.
 
-### Phase 11: a plan that can be rolled back
+### Phase 11: a plan that can be rolled back — done
 
-**Why.** The AI planner (see `docs/ai-planning-and-voice.md`) will create dozens of issues in one apply. pm-hub's undo after an apply is a forward replay of inverse ops, offered only while the Review tab stays open, not persisted anywhere, and — for created items — wrong: `inverse(create)` is `archive`, which removes the item from the project but leaves the issue open in the repository. There is no undo ledger and no restore. The research is blunt: no tracker has a durable action-level undo ledger, and point-in-time restore against GitHub is impossible, so the tool must keep its own versioned snapshot.
+**Why.** The AI planner (see `docs/ai-planning-and-voice.md`) will create dozens of issues in one apply. pm-hub's undo after an apply was a forward replay of inverse ops, offered only while the Review tab stayed open, not persisted anywhere, and — for created items — wrong: `inverse(create)` was `archive`, which removes the item from the project but leaves the issue open in the repository. There was no undo ledger and no restore. The research is blunt: no tracker has a durable action-level undo ledger, and point-in-time restore against GitHub is impossible, so the tool must keep its own versioned snapshot.
 
-**What.**
-- A `Plan` object — `{ id, name, createdAt, ops }` — and a durable store of the ops, not just the labels the history keeps today.
-- The Review screen groups by plan, so a generated plan is one row rather than forty.
-- "Roll back this apply" becomes a first-class action that survives a reload, previews the calls it will make, and is conflict-aware.
-- The inverse of a create becomes close-and-archive, and the interface says plainly that the issues stay in the repository, closed, because GitHub cannot undo a creation.
-- The revert fetches archived items, so an archived item can be addressed at all.
-- The discard toast's Undo button restores what was discarded (today it undoes an earlier change instead).
+**What was built.**
+- `src/model/rollback.ts`: `rollbackOps(applied)` rebuilds the operations that put an apply back, from the operations it recorded. `summariseRollback` and `rollbackNote` say what it will do.
+- The change record now keeps the operations and the ids (`src/store/history.ts`), so an apply can be rolled back days later, in this browser or from the shared history folder.
+- The inverse of a create is now **close and archive**, not just archive: GitHub cannot undo a creation, so the issue is closed as well and the interface says so.
+- An item taken out of the project carries its GitHub id, so a rollback can address it; the conflict check and the apply both fetch it.
+- The Review screen groups by change, so a change of forty items is one row rather than forty (`foldOps` in `src/model/ops.ts`).
+- "Roll back" is a first-class action in *What changed*: it stages the rollback in the draft, where it is checked against GitHub, previewed in the dry run, applied like anything else, and undone with one keystroke.
+- The discard toast's Undo now puts back what was discarded. It used to undo an earlier change instead.
+- Operations that point at an item the apply created are dropped with it, instead of being left pointing at a key that no longer exists.
 
 **Done when.** A plan of forty new issues can be applied, and rolled back days later, and the rollback is one recorded change that can itself be undone.
 

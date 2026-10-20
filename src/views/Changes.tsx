@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { churnAcross, diffBaselines, scopeAddedAfterStart, snapshot, type Baseline, type BaselineDiff } from "../model/diff";
+import { rollbackNote, rollbackOps, summariseRollback } from "../model/rollback";
+import type { Op } from "../model/ops";
 import type { Mapping } from "../model/mapping";
 import type { Project } from "../model/normalize";
 import { buildSchedule } from "../model/schedule";
@@ -18,9 +20,11 @@ interface Props {
   compareId: string | null;
   onCompare: (id: string | null, b: Baseline | null) => void;
   settingsHref: string;
+  /** Records a rollback as a change in the current draft, to be reviewed and applied. */
+  onRecord?: (label: string, ops: Op[]) => void;
 }
 
-export function Changes({ base, edited, mapping, history, compareId, onCompare, settingsHref }: Props) {
+export function Changes({ base, edited, mapping, history, compareId, onCompare, settingsHref, onRecord }: Props) {
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -28,6 +32,7 @@ export function Changes({ base, edited, mapping, history, compareId, onCompare, 
   const [selected, setSelected] = useState<string | null>(compareId);
   const [before, setBefore] = useState<Baseline | null>(null);
   const [churnSet, setChurnSet] = useState<Baseline[]>([]);
+  const [rollbackMsg, setRollbackMsg] = useState<string | null>(null);
   const current = withDraft ? edited : base;
   const nowSnap = useMemo(() => snapshot(current, mapping, buildSchedule(current, mapping), "now"), [current, mapping]);
   const diff: BaselineDiff | null = useMemo(() => (before ? diffBaselines(before, nowSnap) : null), [before, nowSnap]);
@@ -55,6 +60,16 @@ export function Changes({ base, edited, mapping, history, compareId, onCompare, 
       setName(""); setMsg(`Saved “${b.name}”.`);
     } catch (e) { setMsg(e instanceof Error ? `Couldn't save: ${e.message}` : "Couldn't save the baseline."); }
     finally { setSaving(false); }
+  }
+
+  /** Puts an applied change back: the same checks the review screen does, then a draft to apply. */
+  function rollBack(c: { at: string; ops?: Op[]; keys?: Record<string, string>; ids?: Record<string, { item: string; content: string }> }) {
+    if (!onRecord || !c.ops?.length) return;
+    const ops = rollbackOps({ ops: c.ops, keys: c.keys, ids: c.ids });
+    if (!ops.length) { setRollbackMsg("There was nothing to put back."); return; }
+    const note = rollbackNote(summariseRollback(ops));
+    onRecord(`Roll back the change from ${when(c.at)}`, ops);
+    setRollbackMsg(`${ops.length} change${ops.length === 1 ? "" : "s"} are waiting in your draft. Review them and apply to put it back.${note ? ` ${note}` : ""}`);
   }
 
   const where = history.config.mode === "github" ? <>Shared in <b>{history.config.repo}</b> under <code>{history.config.dir}</code></> : <>Saved in this browser only. <a href={settingsHref}>Share it through a GitHub repo</a> so your team sees the same history.</>;
@@ -138,6 +153,7 @@ export function Changes({ base, edited, mapping, history, compareId, onCompare, 
 
       <section className="card pad">
         <div className="section-h"><h2>Applied changes</h2><span className="muted" style={{ fontSize: 12 }}>Most recent first</span></div>
+        {rollbackMsg && <div className="callout info" style={{ marginBottom: 10 }}>{rollbackMsg}</div>}
         {!history.changes.length ? <p className="muted">Nothing applied from pm-hub yet.</p> : (
           <div style={{ display: "grid", gap: 10 }}>
             {history.changes.map(c => {
@@ -146,6 +162,12 @@ export function Changes({ base, edited, mapping, history, compareId, onCompare, 
                 <details key={c.at} className="feed">
                   <summary><b>{when(c.at)}</b> · {c.author ?? "someone"} applied {ok} change{ok === 1 ? "" : "s"}{bad ? `, ${bad} failed` : ""}{c.scenario !== "Default" ? ` from “${c.scenario}”` : ""}</summary>
                   <ul>{c.steps.map((s, i) => <li key={i}><span className={s.status === "applied" ? "pill good" : s.status === "failed" ? "pill bad" : "pill"}>{s.status}</span> {s.label}{s.reason && <em className="muted"> · why: {s.reason}</em>}{s.message && s.status === "failed" && <span className="muted"> · {s.message}</span>}</li>)}</ul>
+                  {c.ops?.length ? (
+                    <div style={{ marginTop: 8 }}>
+                      <button className="btn small" onClick={() => rollBack(c)} disabled={!onRecord}>Roll back</button>
+                      <span className="muted" style={{ fontSize: 12, marginLeft: 8 }}>Puts this back the way it was. GitHub cannot undo a creation, so any issue this created is closed and taken out of the project.</span>
+                    </div>
+                  ) : <p className="muted" style={{ fontSize: 12, marginTop: 6 }}>This change was applied before pm-hub kept the details, so it cannot be rolled back.</p>}
                 </details>
               );
             })}
