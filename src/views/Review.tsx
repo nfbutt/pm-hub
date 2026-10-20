@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  archivedIds, buildSteps, checkStep, endSlip, execute, fetchCurrent, fetchRepoMeta, involvedKeys, postStatusUpdate,
+  archivedIds, buildSteps, checkStep, endSlip, execute, fetchCurrent, fetchRepoMeta, involvedKeys, postStatusUpdate, recheck,
   type Call, type RepoMeta, type Step,
 } from "../github/apply";
 import { writeAccess, type GitHubClient } from "../github/client";
@@ -97,13 +97,24 @@ export function Review({ base, groups, titleOf, client, onApplied, onRecord, ref
       setDry(res.calls); return;
     }
     setPhase("applying"); setSteps(run); setHistNote(null);
+    // Re-read the items right before writing. The check happened a moment ago, and
+    // someone may have changed something in between: their change is not overwritten.
+    let fresh = run;
+    let changed = 0;
+    try {
+      const current = await fetchCurrent(client, base, involvedKeys(ops), archivedIds(ops));
+      const again = recheck(run, current);
+      fresh = again.steps;
+      changed = again.changed;
+    } catch { /* if we cannot re-read, carry on with the check we already did */ }
+    if (changed) setHistNote(`${changed} change${changed === 1 ? "" : "s"} ${changed === 1 ? "was" : "were"} made on GitHub while you were here, and ${changed === 1 ? "was" : "were"} left out. Check again to see them.`);
     // History never blocks an apply: a failed write is reported, not fatal.
     const notes: string[] = [];
     if (history) {
       try { await history.saveBaseline(snapshot(base, mapping, buildSchedule(base, mapping), "Before apply", true)); }
       catch (e) { notes.push(`the baseline before applying (${e instanceof Error ? e.message : "unknown error"})`); }
     }
-    const res = await execute(client, base, run, ctx.current.current, ctx.current.repos, { onStep: s => patch(s.id, { status: s.status, message: s.message }) });
+    const res = await execute(client, base, fresh.filter(s => s.include), ctx.current.current, ctx.current.repos, { onStep: s => patch(s.id, { status: s.status, message: s.message }) });
     // Map draft keys of created items to their new GitHub keys, so the revert can find them.
     const keyMap = new Map<string, string>();
     for (const [k, c] of res.created) { const op = ops.find(o => o.kind === "create" && o.key === k) as Extract<Op, { kind: "create" }> | undefined; if (op?.item.repo) keyMap.set(k, `${op.item.repo}#${c.number}`); }
@@ -159,7 +170,7 @@ export function Review({ base, groups, titleOf, client, onApplied, onRecord, ref
       {!client && <div className="callout info">This is demo data, so nothing can be written. Use <b>Dry run</b> to see exactly what would be sent.</div>}
       {client && access === "no" && <div className="callout warn">This token can only read. To apply changes, create a token with the <b>project</b> and <b>repo</b> scopes, then sign in again.</div>}
       {error && <div className="callout bad">{error} <button className="btn" onClick={() => void check()}>Check again</button></div>}
-      {phase === "checking" && <p className="muted">Checking {ops.length} change{ops.length === 1 ? "" : "s"} against GitHub…</p>}
+      {phase === "checking" && <p className="muted" aria-live="polite">Checking {ops.length} change{ops.length === 1 ? "" : "s"} against GitHub…</p>}
       {ops.length === 0 && phase === "ready" && steps.length === 0 && <div className="card pad"><p>No changes to review.</p></div>}
 
       {stepGroups.length > 0 && (
@@ -226,7 +237,7 @@ export function Review({ base, groups, titleOf, client, onApplied, onRecord, ref
       )}
       {phase === "applying" && <p className="muted">Applying… keep this tab open.</p>}
       {phase === "done" && (
-        <div className={`callout ${failed ? "warn" : "info"}`} style={{ display: "grid", gap: 8 }}>
+        <div className={`callout ${failed ? "warn" : "info"}`} role="status" aria-live="polite" style={{ display: "grid", gap: 8 }}>
           <b>{applied} applied{failed ? `, ${failed} failed` : ""}.</b>
           {histNote && <span>{histNote}</span>}
           <span>{failed ? "Failed changes stay in your draft so you can fix and retry them." : "Your draft now holds only what wasn't sent."} The project is refreshing from GitHub.</span>

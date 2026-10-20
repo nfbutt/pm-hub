@@ -2,7 +2,7 @@
 // mouse uses, so a spoken command is a recorded change like any other: it undoes the
 // same way, and it is checked against GitHub the same way before anything is written.
 import {
-  addBlocker, epicOptions, laneOptions, milestoneOptions, moveToParent, newItem, peopleOptions,
+  addBlocker, laneOptions, milestoneOptions, moveToParent, newItem, peopleOptions,
   removeBlocker, setAssignees, setLane, setRelease, setState, shiftDates,
 } from "../edits";
 import { isEpic, type Mapping } from "../mapping";
@@ -177,8 +177,15 @@ export function choicesFor(project: Project, mapping: Mapping, phrase: string): 
 
 /** The releases, lanes and people, so a spoken value can be checked against them. */
 export function knownValues(project: Project, mapping: Mapping): { releases: string[]; lanes: string[]; people: string[] } {
+  const releases = new Set<string>();
+  for (const m of milestoneOptions(project)) releases.add(m.title);
+  if (mapping.release.kind === "field") {
+    const field = mapping.release.field;
+    const f = project.fields.find(x => x.name === field);
+    if (f?.kind === "single") for (const o of f.options) releases.add(o.name);
+  }
   return {
-    releases: [...new Set([...milestoneOptions(project).map((m: { title: string }) => m.title), ...epicOptions(project, mapping).map((e: { title: string }) => e.title)])].filter(Boolean),
+    releases: [...releases],
     lanes: laneOptions(project, mapping),
     people: peopleOptions(project),
   };
