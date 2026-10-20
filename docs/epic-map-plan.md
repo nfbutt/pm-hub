@@ -1,171 +1,119 @@
-# Epic Map: plan for the remaining phases
+# The Epic Map and the plan: what is next
 
-This is the build plan for the rest of the Epic Map, written for whoever picks it up next. Phases 5, 6, 7 and 8 are done. Phase 9 (the plan engine, the Roadmap and the model's suggestions) is built too — see the end of this file.
+Where the Epic Map stands after phases 5–9, and what to build next.
 
-The research behind phase 9 is in `reports/AI assisted roadmap planning.md`, with the notes in `research_notes/AI assisted roadmap planning/`.
+The research behind the last phase is in `reports/AI assisted roadmap planning.md` (87 sourced links; the raw notes are not in the repo).
 
-## What exists (phase 5, done)
+## Where this is now
 
-| Area | Files | Notes |
-|---|---|---|
-| Analysis engine (pure) | `src/model/epicmap/text.ts`, `categories.ts`, `graph.ts`, `index.ts` | `analyze(project, mapping, {openOnly})` returns `EpicMapModel` with: tasks (+ misfit flag), epics (health, cohesion, coupling, category mix, flags), overlaps (score + shared words), moves, gaps, structure score. `scoreIfMoved(model, taskKey, epicKey)` previews a drop. |
-| Canvas | `src/views/epicmap/canvas.ts` | Cytoscape + fCoSE, loaded lazily (`import()` in `EpicMap.tsx`), so it is its own chunk. Epics are compound nodes, tasks are child nodes, `tray` is "No epic", `g:<category>` nodes are gap ghosts. Drag is hit-tested on `grab`/`drag`/`free` and reported through `CanvasEvents.drop`. The canvas never edits anything. |
-| View | `src/views/EpicMap.tsx`, `src/views/epicmap/epicmap.css` | Score, misplaced tasks, gaps, overlaps, epic health, legend. Phase 6 replaced the misplaced-tasks and gaps sections with the suggestion deck. The tab is registered in `src/router.ts` (`"epics"`) and `src/views/ProjectScreen.tsx` (`TABS` and the render branch). |
-| Data | `src/github/queries.ts`, `types.ts`, `src/model/normalize.ts` | The issue/draft `body` is fetched and clipped to 2,000 characters (`Item.body?`). |
-| Demo data | `src/demo/fixture.ts` | `TOPICS` gives each epic its wording. `STRAYS` plants misplaced stories and a security theme no epic owns. |
-| Tests | `test/epicmap.test.ts`, `test/render.test.tsx` | Run with `npm test`. Also run `npm run typecheck` and `npm run build`. |
+The Epic Map is three views that answer three questions about a plan:
 
-## What exists (phase 6, done)
+| View | Question |
+|---|---|
+| **Epic Map** (`/epics`) | Is the plan *organised* well? Which tasks sit in the wrong epic, which epics overlap, which kinds of work have no epic, and what would change if you moved things? |
+| **Roadmap** (`/roadmap`) | Will the plan *execute*? Every epic on one timeline with the dependencies between them, the chain that decides when the plan ends, how much slack each epic has, and what is broken about the plan as it stands. |
+| **Gantt** (`/gantt`) | What is the work itself? Bars you can drag, conflicts, baselines, releases. |
 
-| Area | Files | Notes |
-|---|---|---|
-| Suggestions (pure) | `src/model/epicmap/suggest.ts` | `suggestions(model, project, mapping)` returns `Suggestion[]` (`id`, `kind: "move"\|"merge"\|"split"\|"gap"`, `title`, `why`, `gain`, `ops`). Sorted by gain, then gap > merge > move > split. `visibleSuggestions(list, memory, now?)` hides what was rejected or snoozed. `claimOps` is the one place that makes an epic for a gap. |
-| Clustering (pure) | `src/model/epicmap/cluster.ts` | `communities(nodes, edges)` finds groups of similar tasks inside an epic. Greedy modularity gains: start with one group per task, join the pair whose merge helps the modularity most, stop when no merge helps. Deterministic, no dependency. |
-| Rejection memory | `src/store/epicmap.ts` | `emap-rejected:<owner>/<number>` in IndexedDB. `readSuggestionMemory`, `rejectSuggestion`, `snoozeSuggestion` (7 days), `undoSuggestion`. |
-| Deck | `src/views/epicmap/Suggestions.tsx` | Cards with title, why, a score chip and Accept / Reject / Snooze. Hovering a card focuses the epics it is about. Replaces the old "Tasks that may be in the wrong place" and "Work with no epic" sections. |
-| Canvas | `src/views/epicmap/canvas.ts` | `CanvasEvents.gap` (was `claim`): clicking a gap bubble points at the matching card. `focusMany(keys)` fits several epics at once. |
-| Tests | `test/suggest.test.ts` | Merge, split, undo of a merge, clustering and the rejection memory. |
+The three share one engine. `src/model/plan/cpm.ts` turns the epics, their dates and the links between them into a forward and a backward pass, total float per epic, the critical chain, and four kinds of broken plan (a loop, an epic that starts before its blocker is finished, work that finishes after its release is due, and epics with no dates or no release). The Epic Map and the Roadmap both show those problems, worded the same way.
 
+A model on your own machine (opt-in, localhost only, off by default) can read the plan and propose things: which items really block each other, which epics should ship together, what an epic's mix of work really is. Nothing it says is applied by itself, and nothing it says is shown until it passes a deterministic check in `src/model/plan/infer.ts`: real items, still open, not already linked, no loop, and **a reason that is a quote which really appears in one of the two issues**. About one model proposal in five is wrong, so every proposal is a click, and every click is an ordinary recorded change that undo works on.
+
+## The plan
+
+Each phase below is small enough to be one PR. The order is by value, not by effort.
+
+### Phase 10: a working calendar
+
+**Why.** Bars are drawn on plain calendar days. A plan that runs through a weekend is wrong in a way every reviewer spots, and it quietly lengthens the critical chain — so the float and the "ends on" date are both wrong. The scheduling literature treats non-working days as a first-class input, not a detail.
+
+**What.**
+- `src/model/calendar.ts`: working days (Monday to Friday by default) and a per-project list of holidays.
+- `buildSchedule` and `buildPlan` count working days, not calendar days, when they work out an earliest start, a latest start and a length.
+- The Gantt shades the non-working days behind the bars.
+- Settings: "Working days" and "Holidays" per project, next to the other project settings.
+
+**Done when.** An epic that spans a weekend is two working days longer on the plan than on the calendar, the critical chain respects it, and the Roadmap's "plan ends" date moves accordingly.
+
+**Not doing.** Public holidays per country, and resource levelling — that needs capacity data pm-hub does not have.
+
+### Phase 11: releases without a due date
+
+**Why.** A single-select "Release" field has no due date, so the plan cannot be checked against it and the Roadmap draws no release markers. The check works for milestone-based releases and is silent for field-based ones, which is worse than not having it: the plan looks fine because nothing was checked.
+
+**What.**
+- `releaseOf` returns a due date for the field rule when the project has a date field to read it from, or falls back to the end of the release's own work.
+- `src/model/plan/cpm.ts` uses it; the Roadmap draws the markers and the Gantt draws the lines.
+- `setRelease` is unchanged: releases still have to exist.
+
+**Done when.** A project with a Release field and a due date field has its plan checked against its releases, and an epic that misses its release is named.
+
+**Not doing.** Creating milestones. The API pm-hub uses cannot create them, so a release the project does not have is a release pm-hub cannot put work into.
+
+### Phase 12: two-stage release grouping
+
+**Why.** Today the model names the groups itself, which means the same project can be grouped differently on two runs — the "roadmap churn" failure. The safer recipe is two stages: the model labels each piece of work with a small closed theme, and pm-hub clusters on that label deterministically. The phasing is then reproducible and can be re-derived after any edit.
+
+**What.**
+- A theme prompt with a closed label set (the project's own labels and categories), one label per item.
+- `cluster` on (theme, epic), in `src/model/epicmap/cluster.ts` or beside it.
+- The release suggestion then comes from the clusters, not from the model.
+
+**Done when.** The same project asked twice gives the same grouping, and changing one dependency re-derives it rather than inventing a new one.
+
+**Not doing.** Letting the model choose dates. It is optimistic and unbounded, and it is not a commitment.
+
+### Phase 13: effort as a distribution
+
+**Why.** A model's duration estimate is optimistic and unbounded, and it is very sensitive to how the question is phrased. The defensible contract is a distribution, not a number: three points, expected value and spread computed in the browser.
+
+**What.**
+- The model is asked for three points (optimistic, most likely, pessimistic) per epic.
+- `te = (o + 4m + p) / 6` and `σ = (p − o) / 6` are computed client-side, and the spread is carried through the plan like a duration range.
+- The drawer and the Roadmap show a range, never a single committed date.
+
+**Done when.** An epic the model has sized shows a range on the map, and the critical chain uses the expected length.
+
+**Not doing.** Storing the estimate as a promise, or re-deriving historical estimates with a changed prompt — historical durations are never re-derived.
+
+### Later, when there is something to write back
+
+- **Link types and lag.** Finish-to-start, start-to-start, finish-to-finish, start-to-finish, and a signed lag. GitHub only has "blocked by", so there is nowhere to write these yet; the plan model would need the field before the interface can.
+- **Resource levelling.** Smoothing first (it never moves the critical path), levelling only as a trade the user opts into. Needs per-person capacity, which pm-hub has hints of but not enough of.
+- **Work outside the project.** The loader fetches only what is in the project, so a dependency on an issue that is not in it can only be reported, never modelled.
 
 ## Rules (don't break these)
 
-1. **Every edit goes through `editor.record(label, ops)`, using the helpers in `src/model/edits.ts`** (`moveToParent`, `newItem`, `setLabels`, `setLane`, `splitItem`). Don't add a new `Op` kind unless you cannot avoid it.
+1. **Every edit goes through `editor.record(label, ops)`, using the helpers in `src/model/edits.ts`** (`moveToParent`, `newItem`, `setLabels`, `setLane`, `splitItem`, `setRelease`). Don't add a new `Op` kind unless you cannot avoid it.
    - Ops that undo together go in one `record` call.
    - Nothing writes to GitHub outside `src/github/apply.ts`. `test/write-guard.test.ts` enforces this.
-2. **The model is pure and unit-tested.** Put logic in `src/model/epicmap/`. Views only render it and call `record`.
+2. **The model is pure and unit-tested.** Put logic in `src/model/` (`epicmap/` for the map, `plan/` for the schedule and the checks). Views only render it and call `record`.
 3. **When `editor` is undefined, the view is read-only.** Hide every action button and make nothing draggable.
 4. **Tests use synthetic data only** (`makeFixture`, `demoProject`). Never use real project data.
-5. **Network policy.** The built page may only talk to `api.github.com` (the CSP in `vite.config.ts`). Phase 7 widens this to localhost only, and only for the opt-in model.
-6. **Style.** Short "why" comments, CSS variables from `src/ui/tokens.css` and the `--cat-*` tokens in `epicmap.css`, and check both light and dark themes.
-7. **One PR per phase**, titled `v2 phase N: …`.
+5. **Network policy.** The built page may only talk to `api.github.com` (the CSP in `vite.config.ts`), plus localhost for the opt-in model.
+6. **The model proposes; the code decides.** Every model answer passes a deterministic check before it is shown (`src/model/plan/infer.ts`), and nothing is applied without a click. Do not show the model's own confidence: show the quote and the items, so the reader can check them.
+7. **Style.** Short "why" comments, CSS variables from `src/ui/tokens.css` and the `--cat-*` tokens in `epicmap.css`, and check both light and dark themes.
+8. **One PR per phase**, titled `v2 phase N: …`.
 
-## Phase 6: Suggestions and gaps — done
-
-Goal: a deck of suggestion cards you can accept, reject or snooze, covering move, merge, split and create-epic. Built as described above. Two notes for whoever picks it up:
-
-- The clustering is a greedy modularity pass (`src/model/epicmap/cluster.ts`), not label propagation: label propagation collapses to one group too often on a graph this small, and the plan's own test (two topics in one epic) needs the two groups to survive.
-- Splitting an epic always lowers the structure score, because modularity likes few large groups. The card says so honestly (`−6 score`) instead of pretending the split is a win.
-
-
-## Phase 7: Local Qwen (optional, opt-in) — done
-
-Goal: better similarity, category names, explanations and gap ideas from a model running on the user's own machine. Nothing goes to a hosted service.
-
-Built as described below, with these differences worth knowing:
-
-- **The client refuses any address that is not this computer.** `isLocalBase` only allows `localhost` and `127.0.0.1`, so a base URL that points somewhere else is never called. This is what makes the promise in the README true rather than aspirational.
-- **The two hooks are separate on purpose.** `useLocalVectors` only needs the project; `useLocalChat` needs the map. The map is built with the vectors, so one hook feeding the other would be a circle.
-- **Embedding cosines are stretched** (`denseScore` in `src/model/epicmap/text.ts`). They sit higher and narrower than TF-IDF ones, so one set of thresholds means the same thing in both spaces.
-- **Answers are cached** in IndexedDB by a hash of the prompt, so the model is asked once per question, not once per visit.
+## What exists
 
 | Area | Files | Notes |
 |---|---|---|
-| Client | `src/ai/local.ts` | `embed`, `chatJson`, `testConnection`, `isLocalBase`, the three answer checks and the prompts. A 20 s timeout; any failure comes back as `null`. |
-| Settings | `src/store/cache.ts` (`Prefs.local`), `src/views/Settings.tsx` | Off by default. A section with the address, the two model names and a "Test connection" button. |
-| Embeddings | `src/model/epicmap/index.ts`, `graph.ts`, `text.ts` | `analyze(project, mapping, {openOnly, vectors})` compares by meaning when every item has a vector. `buildEdgesFrom` builds the graph from a similarity function. |
-| Cache | `src/store/epicmap.ts` | `emap-vector:<hash>` for embeddings (the text is kept with the vector, so a hash clash cannot hand back the wrong one), `emap-chat:<hash>` for answers. |
-| Hooks | `src/views/useLocalModel.ts` | `useLocalVectors` and `useLocalChat`. |
-| UI | `src/views/EpicMap.tsx` | A pill in the header: "✦ Qwen connected", "✦ Qwen not answering" or "Local analysis". A ✦ marks anything the model wrote. The model's gap ideas join the deck as suggestions. |
-| CSP | `vite.config.ts` | `connect-src` allows `http://localhost:*` and `http://127.0.0.1:*`. |
-| Tests | `test/local.test.ts` | fetch is stubbed: a happy path, answers that do not pass the check being dropped, and the map still working when the endpoint is down. |
+| The map (pure) | `src/model/epicmap/index.ts`, `text.ts`, `categories.ts`, `graph.ts` | `analyze(project, mapping, {openOnly, vectors})` returns tasks (+ misfit), epics (health, cohesion, coupling, mix, flags), overlaps, moves, gaps and a structure score. `scoreIfMoved` previews a drop. |
+| The map's advice (pure) | `src/model/epicmap/suggest.ts`, `cluster.ts`, `quests.ts`, `lens.ts` | Move / merge / split / create-epic suggestions with their gain; clustering of similar tasks; the four quests; the lenses (category, release, assignee, priority). |
+| The plan (pure) | `src/model/plan/cpm.ts`, `infer.ts` | The forward and backward pass, float, the critical chain, the four kinds of broken plan, and the gate every model proposal passes. |
+| Canvas | `src/views/epicmap/canvas.ts` | Cytoscape + fCoSE, loaded lazily so it is its own chunk. Epics are compound nodes, tasks are child nodes, `tray` is "No epic", `g:<category>` are gap ghosts. The canvas never edits anything. |
+| Views | `src/views/EpicMap.tsx`, `Roadmap.tsx`, `epicmap/`, `plan/` | The map, the roadmap, the suggestion deck, meeting mode, the timelapse, and the plan check. |
+| The model | `src/ai/local.ts`, `src/views/useLocalModel.ts`, `usePlanSuggestions.ts` | The client, the prompts, and the two hooks. Localhost only; a failure is always a fallback, never an error. |
+| Memory | `src/store/epicmap.ts`, `src/store/cache.ts` | What you turned down, the cached embeddings and answers, and the local model's settings. |
+| Data | `src/github/queries.ts`, `src/model/normalize.ts` | Issue and draft bodies, clipped to 2,000 characters. Blocked-by links (up to 25 per issue, one direction). |
+| Demo data | `src/demo/fixture.ts` | `TOPICS` gives each epic its wording; `STRAYS` plants misplaced stories and a security theme no epic owns; two epics are blocked by an earlier one but start before it is finished, so the plan has something real to find. |
+| Tests | `test/epicmap.test.ts`, `suggest.test.ts`, `plan.test.ts`, `quests.test.ts`, `local.test.ts`, `render.test.tsx` | `npm test`, plus `npm run typecheck` and `npm run build`. |
 
-### The plan as written
+## Known limits
 
-1. **`src/ai/local.ts`:**
-   - A client for an OpenAI-compatible endpoint: `POST {base}/embeddings`, and `POST {base}/chat/completions` with `response_format: {type:"json_object"}`.
-   - Settings `{ enabled: false, base: "http://localhost:11434/v1", chatModel: "qwen3", embedModel: "qwen3-embedding" }`, stored in prefs (`src/store/cache.ts` `Prefs`). Add a settings section in `src/views/Settings.tsx` with a "Test connection" button.
-   - A 20 s timeout on every call. Any failure returns `null`, and the caller falls back to local results.
-2. **Embeddings:**
-   - `analyze` accepts an optional `vectors?: Map<itemKey, number[]>`. When present, use dense cosine instead of TF-IDF in `buildEdges` and the centroids.
-   - Keep `graph.ts` generic: give it a `similarity(i, j)` function, or precomputed top-k lists.
-   - Cache the vectors in IndexedDB, keyed by a hash of `title + body`.
-3. **Chat uses** (each validated with a tiny schema check, with any invalid answer dropped):
-   - name an epic's category mix;
-   - a one-sentence explanation of an overlap;
-   - gap ideas: given the epic titles plus a category histogram, return up to 3 `{title, why, taskKeys}`, keeping only keys that exist.
-4. **CSP:** in `vite.config.ts`, add `http://localhost:* http://127.0.0.1:*` to `connect-src`.
-5. **README:** state plainly that only issue text goes to your own localhost model and the GitHub token never does. Document `OLLAMA_ORIGINS=https://nfbutt.github.io` for CORS.
-6. **UI:** a status pill in the Epic Map header ("Qwen connected" / "Local analysis"), and a "✦" marker on any text the model wrote.
-7. **Tests:** stub `fetch`. Cover a happy path, invalid JSON being dropped, and the endpoint being down while `analyze` still works.
-
-## Phase 8: Meeting mode, timelapse and quests — done
-
-Goal: run the Epic Map as a meeting, look at how the plan changed over time, and give the team something to aim at. Built as described below.
-
-| Area | Files | Notes |
-|---|---|---|
-| Meeting mode | `src/views/epicmap/MeetingMode.tsx` | A panel over the map (the map stays visible). The agenda is the five worst epics by health, then the five best suggestions. "Next" points the map at the item, with an optional three-minute timer. The tally (moves, merges, new epics, score) is kept in the Epic Map's state, so accepts from the panel count too. The summary at the end links to Review. |
-| Timelapse | `src/views/epicmap/Timelapse.tsx`, `src/model/epicmap/baseline.ts` | Every baseline in the plan history is read back as a project (`baselineProject`, `baselineMapping`) and run through the same analysis. A slider steps through them and the map follows; the score over time is a line chart. The baselines are read when there are new ones, not on every edit. |
-| Quests | `src/model/epicmap/quests.ts` | `quests(before, now)`: resolve 3 overlaps, adopt every orphan, fill a gap, raise the score by 10. Pure, and shown as a small card in the panel. |
-| Finished quests | `src/store/history.ts`, `src/views/useHistory.ts` | `QuestRecord` sits with the rest of the plan history: `quests/` in the history folder (or in the browser). The team sees what was finished. |
-| Lenses | `src/model/epicmap/lens.ts`, `src/views/epicmap/canvas.ts` | Colour and group the map by Category (default), Release, Assignee or Priority. The groups take the colours the categories already use, so both themes still work. |
-| Tests | `test/quests.test.ts` | The quests, a baseline read back as a map, and the lenses. |
-
-### The plan as written
-
-1. **Meeting mode** (`src/views/epicmap/MeetingMode.tsx`): a full-screen overlay.
-   - Agenda: the 5 worst epics by health, then the top 5 suggestions.
-   - "Next" focuses each item (`canvas.focus`), with an optional 3-minute timer per item.
-   - A session tally of moves, merges, new epics and score change, kept in component state.
-   - At the end, a summary card with a link to the Review tab (`hrefFor(routeFor("review"))`).
-2. **Timelapse** (`src/views/epicmap/Timelapse.tsx`): a slider over the plan-history baselines (`useHistory().baselines`; `src/model/diff.ts` `Baseline` has `parentKey`/`epic` per item).
-   - Rebuild a `Project`-like view of each baseline, run `analyze`, and show score over time as a sparkline (reuse `src/ui/charts.tsx`).
-   - Animate the canvas between baselines by calling `canvas.update`.
-3. **Quests:** a pure `quests(modelBefore, modelNow)` that returns progress on "Resolve 3 overlaps", "Adopt every orphan", "Fill a gap" and "Raise the score by 10".
-   - Show them as a small card in the panel.
-   - Store finished quests with the plan history so the team sees them.
-4. **Lenses:** a toolbar switch for colour and grouping: Category (default) · Release · Assignee · Priority.
-   - Pass `lens` into `elements()` in `canvas.ts`, and use `releaseOf` / `priorityOf` / the assignees for the `cat` data.
-
-## Known limits of v1 (good first fixes)
-
-- Epic labels are drawn in model units, so they shrink when you zoom out. A `min-zoomed-font-size` now keeps them readable; a constant-size label overlay would be better still.
-- Similarity is plain TF-IDF over titles, bodies and labels. Generic verbs are filtered by `GENERIC` in `text.ts`; extend that list for real projects.
-- The category keywords in `categories.ts` are fixed. An editable dictionary (stored per project) belongs in Phase 6 or 7.
-- Pull requests are left out of the map, because GitHub PRs can't have a parent issue.
 - The structure score is modularity, and modularity likes few large groups: splitting an epic always lowers it a little, even when the split is right.
-
-## Phase 9: the plan engine, the Roadmap and the model's suggestions — done
-
-The re-assessment asked for one thing: make the Epic Map useful for **clarifying how a project will actually be executed** — organising epics, roadmaps and Gantt charts — and use AI to work out milestones and dependencies.
-
-### What the research said (see `reports/AI assisted roadmap planning.md`)
-
-- **The LLM drafts; the solver computes.** In every tool that ships this, dependency shifting, critical path and auto-scheduling are deterministic, and the model only proposes. "LLMs are weak plan generators and strong proposal generators."
-- **Schema-valid is not semantically correct.** Constrained JSON output fixes parsing, not meaning: the strongest models were measured at ~100% schema validity and ~80% semantic success on structured calls.
-- **Validate with a solver, never self-critique.** Self-verification measurably hurts. For a dependency graph the external verifier is free: acyclicity, referential integrity and an evidence check.
-- **Show verifiability, not confidence.** A model's verbalised confidence is miscalibrated and unstable; what you can check yourself (a real issue, a real quote) is a better signal.
-- **Cheap acceptance must be paired with cheap, no-blame rejection.** Forcing people to justify turning a suggestion down makes them rubber-stamp the rest.
-- **Partial rationale beats a full narrative.** Explanations change reliance without improving discrimination: show *what to check*.
-- **A single trust badge does not fit both jobs.** Estimating a duration reads objective; prioritising a roadmap reads subjective.
-- **CPM is still the right algorithm**: forward pass, backward pass, `total float = LS − ES`, zero float marks the critical chain. Smoothing, not levelling, is the safe default because levelling can move the critical path.
-
-### What was built
-
-| Area | Files | Notes |
-|---|---|---|
-| Plan engine (pure) | `src/model/plan/cpm.ts` | `buildPlan(project, mapping, schedule)`: the epic-level dependency graph (a link between two stories is a link between their epics), a forward and backward pass, total float, the critical chain, and the reasons a plan cannot work: a loop, an epic that starts before its blocker is finished, work that finishes after its release is due, epics with no dates or no release. |
-| Checks (pure) | `src/model/plan/infer.ts` | `checkLinks` and `checkReleases`: the gate every model proposal passes. Real items, still open, not already linked, no loop, and **the reason has to be a quote that really appears in one of the two items**. Everything else is dropped, with the reason why. |
-| Prompts | `src/ai/local.ts` | `promptDependencies` and `promptReleases`, with the answer checks. The model is shown the pairs the plan already thinks are related, so it judges what is in front of it instead of inventing work. |
-| Roadmap | `src/views/Roadmap.tsx` | Every epic on one timeline, with the dependencies drawn as arrows, the critical chain in red, the release markers, and how much slack each epic has. A new tab, between Epic Map and Status & workload. |
-| Plan panel | `src/views/plan/PlanProblems.tsx`, `PlanCheck.tsx` | "Can this plan work?" and "What the model spotted". The problems card is used by both the Roadmap and the Epic Map, so a problem reads the same wherever it is seen. |
-| Hook | `src/views/usePlanSuggestions.ts` | Asks the model, checks everything it says, and hands back only what passes. Answers are cached, so the model is asked once. |
-| Edits | `src/model/edits.ts` | `setRelease`: puts an item in a release using the project's own release rule. No new kind of op. |
-| Tests | `test/plan.test.ts` | The chain, the slack, the three kinds of broken plan, and every way a model proposal is dropped. |
-
-### What it deliberately does not do
-
-- **It never applies anything by itself.** Every suggestion is a click, and every click is an ordinary recorded change, so undo works.
-- **It does not show a confidence badge.** The card shows the quote and the two issues, so the reader can check it in one glance.
-- **It does not invent milestones.** GitHub milestones cannot be created through the API pm-hub uses, so the model may only group work into releases that already exist.
-- **It does not estimate dates.** A model's duration is optimistic and unbounded; the plan engine works with the dates you have.
-
-### What is next, in order of value
-
-1. **A working calendar.** The bars are drawn on plain calendar days, so a plan that runs through weekends is wrong in a way every reviewer spots — and it quietly lengthens the critical chain. Skipping Saturdays and Sundays in the forward and backward passes is the single highest-value change that needs no model at all. It touches `src/model/schedule.ts` and everything that reads it, so it wants its own phase.
-2. **Releases without a due date.** A single-select "Release" field has no due date, so the plan cannot be checked against it. Reading the due date from the epic's own end date, or from a milestone, would give the check something to check against.
-3. **Two-stage release grouping.** The model currently names the groups itself, which can churn between runs. The safer recipe is for the model to label each piece of work with a small closed theme and for pm-hub to cluster on that label deterministically, so the phasing is reproducible and can be re-derived after any edit.
-4. **Effort as a distribution.** Ask for three points (optimistic, most likely, pessimistic) and compute the expected value and spread in the browser with PERT. Never a single committed date.
-5. **Link types and lag.** GitHub only has "blocked by" (finish to start), so there is nothing to write back yet; the plan model would need a signed lag per link before it could say anything about a two-day gap.
-
-
+- The category dictionary in `categories.ts` is fixed and global. An editable, per-project dictionary belongs in a later phase.
+- Pull requests are left out of the map, because a GitHub PR cannot have a parent issue.
+- Epic labels shrink when the map is zoomed out; a `min-zoomed-font-size` keeps them readable, but a constant-size overlay would be better.
+- Similarity is plain TF-IDF over titles, bodies and labels. The generic verbs filtered by `GENERIC` in `text.ts` need extending for real projects.
+- The plan works in calendar days. See phase 10.
