@@ -19,6 +19,7 @@ import { EpicMap } from "./EpicMap";
 import { Roadmap } from "./Roadmap";
 import { Planner } from "./Planner";
 import { GlobalMic } from "./voice/GlobalMic";
+import { say } from "../ai/voice";
 import { Overview } from "./Overview";
 import { Progress } from "./Progress";
 import { Schedule } from "./Schedule";
@@ -191,7 +192,8 @@ export function ProjectScreen({ source, view, onSignOut }: { source: Source; vie
         {menuOpen && shown && mapping && (
           <CommandMenu project={shown} mapping={mapping} editor={editor} selected={selected} onSelect={setSelected}
             views={TABS} go={v => { location.hash = hrefFor(routeFor(v as ViewId)); }}
-            undo={cs.undo} redo={cs.redo} toggleGithubOnly={() => setGithubOnly(g => !g)} onClose={() => setMenuOpen(false)} />
+            undo={cs.undo} redo={cs.redo} toggleGithubOnly={() => setGithubOnly(g => !g)} onClose={() => setMenuOpen(false)}
+            local={prefs.local} speak={say} />
         )}
       </main>
     </>

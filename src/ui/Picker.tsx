@@ -1,17 +1,26 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 
-export interface PickOption { value: string; label: string; hint?: string }
+export interface PickOption { value: string; label: string; hint?: string; /** Always shown at the top, whatever is typed. */ pinned?: boolean }
 
 /** Searchable list. Type to filter, arrows to move, Enter to choose, Esc to close. */
-export function PickList({ options, onPick, placeholder = "Search…", selected = [], autoFocus = true, emptyText = "No matches" }: {
+export function PickList({ options, onPick, placeholder = "Search…", selected = [], autoFocus = true, emptyText = "No matches", value, onQuery }: {
   options: PickOption[]; onPick: (value: string) => void; placeholder?: string; selected?: string[]; autoFocus?: boolean; emptyText?: string;
+  /** When given, the text is controlled from outside, so something else can type into it. */
+  value?: string;
+  /** Called whenever the text changes. */
+  onQuery?: (q: string) => void;
 }) {
-  const [q, setQ] = useState("");
+  const [own, setOwn] = useState("");
+  const q = value ?? own;
+  const setQ = (next: string) => { if (value === undefined) setOwn(next); onQuery?.(next); };
   const [hi, setHi] = useState(0);
   const listRef = useRef<HTMLUListElement>(null);
   const shown = useMemo(() => {
     const words = q.toLowerCase().split(/\s+/).filter(Boolean);
-    return options.filter(o => words.every(w => `${o.label} ${o.hint ?? ""}`.toLowerCase().includes(w))).slice(0, 200);
+    // A pinned option is always there: it is the thing the person was trying to say.
+    const pinned = options.filter(o => o.pinned);
+    const rest = options.filter(o => !o.pinned).filter(o => words.every(w => `${o.label} ${o.hint ?? ""}`.toLowerCase().includes(w)));
+    return [...pinned, ...rest].slice(0, 200);
   }, [q, options]);
   useEffect(() => setHi(0), [q]);
   useEffect(() => { listRef.current?.querySelector<HTMLElement>(`[data-i="${hi}"]`)?.scrollIntoView({ block: "nearest" }); }, [hi]);
