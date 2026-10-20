@@ -33,6 +33,30 @@ export function buildEdges(vecs: Vec[], links: [number, number][]): Edge[] {
 }
 
 /**
+ * The same graph, built from a similarity function rather than from terms. Used when the
+ * items have embedding vectors: every pair is compared, the closest neighbours win.
+ */
+export function buildEdgesFrom(sim: (i: number, j: number) => number, count: number, links: [number, number][]): Edge[] {
+  const weight = new Map<string, number>();
+  const key = (a: number, b: number) => (a < b ? `${a},${b}` : `${b},${a}`);
+  for (let i = 0; i < count; i++) {
+    const near: [number, number][] = [];
+    for (let j = 0; j < count; j++) {
+      if (j === i) continue;
+      const s = sim(i, j);
+      if (s >= MIN_SIM) near.push([j, s]);
+    }
+    near.sort((x, y) => y[1] - x[1]).slice(0, K).forEach(([j, s]) => weight.set(key(i, j), s));
+  }
+  for (const [a, b] of links) {
+    if (a === b) continue;
+    const k = key(a, b);
+    weight.set(k, (weight.get(k) ?? sim(a, b)) + LINK_BONUS);
+  }
+  return [...weight.entries()].map(([k, w]) => { const [a, b] = k.split(",").map(Number); return { a: a!, b: b!, w }; });
+}
+
+/**
  * Normalised modularity, 0–100: 100 when every bit of similarity sits inside an epic, around 0
  * when epics are no better than random. `group[i]` is task i's epic; tasks with no epic are
  * passed as their own singleton group, so adopting them into the right epic raises the score.

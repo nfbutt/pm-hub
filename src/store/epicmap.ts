@@ -2,6 +2,7 @@
 // Kept in IndexedDB with the rest of the per-browser state. Failures are swallowed:
 // a full disk should not stop the map from working.
 import { get as idbGet, set as idbSet } from "idb-keyval";
+import { hashText } from "../model/epicmap/text";
 import type { SuggestionMemory } from "../model/epicmap/suggest";
 
 /** How long a snoozed suggestion stays hidden. */
@@ -37,4 +38,39 @@ export async function undoSuggestion(owner: string, number: number, id: string) 
   const memory = await readSuggestionMemory(owner, number);
   delete memory[id];
   await writeSuggestionMemory(owner, number, memory);
+}
+
+// ---------------------------------------------------------------- local model
+
+/** One cached embedding: the vector, and the text it was made from. */
+export interface CachedVector { text: string; vector: number[] }
+
+const vectorKey = (hash: string) => `emap-vector:${hash}`;
+
+/**
+ * The embedding for some text, if it was made before. The text is kept with the vector
+ * so a hash clash can never hand back the wrong one.
+ */
+export async function readVector(text: string): Promise<number[] | null> {
+  try {
+    const hit = await idbGet<CachedVector>(vectorKey(hashText(text)));
+    return hit && hit.text === text && Array.isArray(hit.vector) ? hit.vector : null;
+  } catch { return null; }
+}
+
+/** Keeps an embedding for next time. */
+export async function writeVector(text: string, vector: number[]) {
+  try { await idbSet(vectorKey(hashText(text)), { text, vector } satisfies CachedVector); } catch { /* optional */ }
+}
+
+const chatKey = (hash: string) => `emap-chat:${hash}`;
+
+/** A model answer from before, so the model is only asked once. */
+export async function readChat<T>(prompt: string): Promise<T | null> {
+  try { return ((await idbGet<T>(chatKey(hashText(prompt)))) ?? null) as T | null; } catch { return null; }
+}
+
+/** Keeps a model answer for next time. */
+export async function writeChat<T>(prompt: string, answer: T) {
+  try { await idbSet(chatKey(hashText(prompt)), answer); } catch { /* optional */ }
 }

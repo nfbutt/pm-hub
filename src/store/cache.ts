@@ -1,6 +1,7 @@
 // Per-browser cache of loaded projects, mappings and drafts (IndexedDB via idb-keyval).
 // Failures are swallowed: the app works without a cache, just slower.
 import { del as idbDel, get as idbGet, set as idbSet } from "idb-keyval";
+import { defaultLocal, type LocalSettings } from "../ai/local";
 import type { Project } from "../model/normalize";
 import type { Mapping } from "../model/mapping";
 import type { Draft } from "../model/schedule";
@@ -63,11 +64,16 @@ export interface Prefs {
   zoom: "week" | "month" | "quarter"; fyStartMonth: number; includeClosed: boolean;
   /** What happens to dependents when a blocker's dates move. */
   shiftMode: "keep-gap" | "on-overlap" | "none";
+  /** A model on this computer, for the Epic Map. Off unless asked for. */
+  local: LocalSettings;
 }
 const PREFS = "pm-hub:prefs";
-export const defaultPrefs: Prefs = { zoom: "month", fyStartMonth: 1, includeClosed: false, shiftMode: "on-overlap" };
+export const defaultPrefs: Prefs = { zoom: "month", fyStartMonth: 1, includeClosed: false, shiftMode: "on-overlap", local: defaultLocal };
 export function readPrefs(): Prefs {
-  try { return { ...defaultPrefs, ...JSON.parse(localStorage.getItem(PREFS) ?? "{}") }; } catch { return defaultPrefs; }
+  try {
+    const raw = JSON.parse(localStorage.getItem(PREFS) ?? "{}") as Partial<Prefs>;
+    return { ...defaultPrefs, ...raw, local: { ...defaultPrefs.local, ...(raw.local ?? {}) } };
+  } catch { return defaultPrefs; }
 }
 export function writePrefs(p: Prefs) {
   try { localStorage.setItem(PREFS, JSON.stringify(p)); } catch { /* optional */ }

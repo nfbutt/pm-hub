@@ -160,7 +160,7 @@ export function ProjectScreen({ source, view, onSignOut }: { source: Source; vie
             {active === "burnup" && <BurnUp project={shown} mapping={mapping} />}
             {active === "confidence" && <Confidence project={shown} mapping={mapping} />}
             {active === "dependencies" && <Dependencies project={shown} mapping={mapping} draft={draft} />}
-            {active === "epics" && <EpicMap project={shown} mapping={mapping} draft={draft} editor={editor} />}
+            {active === "epics" && <EpicMap project={shown} mapping={mapping} draft={draft} editor={editor} local={prefs.local} />}
             {active === "changes" && project && (
               <Changes base={project} edited={shown} mapping={mapping} history={history} compareId={compare?.id ?? null}
                 onCompare={(id, b) => { compareTo(id, b); if (id) location.hash = hrefFor(routeFor("gantt")); }} settingsHref={hrefFor(routeFor("settings"))} />

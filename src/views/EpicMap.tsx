@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { analyze, scoreIfMoved, type EpicMapModel } from "../model/epicmap";
 import { categoryName } from "../model/epicmap/categories";
-import { suggestions, visibleSuggestions, type Suggestion, type SuggestionMemory } from "../model/epicmap/suggest";
+import { ideaSuggestion, suggestions, visibleSuggestions, type Suggestion, type SuggestionMemory } from "../model/epicmap/suggest";
 import { moveToParent } from "../model/edits";
 import type { Mapping } from "../model/mapping";
 import type { Project } from "../model/normalize";
@@ -12,15 +12,29 @@ import { ItemDrawer } from "./ItemDrawer";
 import type { Editor } from "./useChangeSet";
 import type { DropTarget, MapCanvas } from "./epicmap/canvas";
 import { Suggestions } from "./epicmap/Suggestions";
+import { useLocalChat, useLocalVectors } from "./useLocalModel";
 import "./epicmap/epicmap.css";
 
-export function EpicMap({ project, mapping, draft, editor }: { project: Project; mapping: Mapping; draft: Draft; editor?: Editor }) {
+/** The model on this computer, if the user turned one on. */
+export interface EpicMapLocal { enabled: boolean; base: string; chatModel: string; embedModel: string }
+
+/** No model: the same object every time, so the effects do not run again and again. */
+const NO_MODEL: EpicMapLocal = { enabled: false, base: "", chatModel: "", embedModel: "" };
+
+export function EpicMap({ project, mapping, draft, editor, local }: {
+  project: Project; mapping: Mapping; draft: Draft; editor?: Editor;
+  local?: EpicMapLocal;
+}) {
   const [openOnly, setOpenOnly] = useState(true);
   const [open, setOpen] = useState<string | null>(null);
   const [hover, setHover] = useState<{ key: string; target: DropTarget } | null>(null);
   const [memory, setMemory] = useState<SuggestionMemory>({});
   const [lit, setLit] = useState<string | null>(null);
-  const model = useMemo(() => analyze(project, mapping, { openOnly }), [project, mapping, openOnly]);
+  const settings = local ?? NO_MODEL;
+  // With a model on this computer, the map compares work by meaning.
+  const vectors = useLocalVectors(project, settings);
+  const model = useMemo(() => analyze(project, mapping, { openOnly, vectors: vectors.vectors }), [project, mapping, openOnly, vectors.vectors]);
+  const chat = useLocalChat(project, model, settings);
   // The score when the tab opened, so a meeting can see how far it moved things.
   const [startScore] = useState(() => model.score);
   const byKey = useMemo(() => new Map(project.items.map(i => [i.key, i])), [project]);
@@ -33,7 +47,12 @@ export function EpicMap({ project, mapping, draft, editor }: { project: Project;
   };
 
   // The deck of advice: everything the map thinks is worth doing.
-  const all = useMemo(() => suggestions(model, project, mapping), [model, project, mapping]);
+  const all = useMemo(() => {
+    const mine = suggestions(model, project, mapping);
+    // Ideas from the local model become suggestions too, with a name of their own.
+    const ideas = chat.ideas.map(i => ideaSuggestion(model, project, mapping, i)).filter((s): s is Suggestion => !!s);
+    return [...mine, ...ideas];
+  }, [model, project, mapping, chat.ideas]);
   const deck = useMemo(() => visibleSuggestions(all, memory), [all, memory]);
   useEffect(() => { void readSuggestionMemory(project.owner, project.number).then(setMemory); }, [project.owner, project.number]);
   const accept = (s: Suggestion) => record(`Accepted: ${s.title}`, s.ops);
@@ -81,6 +100,8 @@ export function EpicMap({ project, mapping, draft, editor }: { project: Project;
   const delta = preview !== null && model.score !== null ? preview - model.score : null;
   const sessionDelta = model.score !== null && startScore !== null ? model.score - startScore : 0;
   const epics = [...model.epics].sort((a, b) => (a.health ?? 101) - (b.health ?? 101));
+  const connected = vectors.status === "on" || chat.status === "on";
+  const unreachable = settings.enabled && !connected && vectors.status !== "working" && chat.status !== "working";
 
   return (
     <div className="emap">
@@ -90,6 +111,9 @@ export function EpicMap({ project, mapping, draft, editor }: { project: Project;
           <p className="muted" style={{ maxWidth: "80ch" }}>Each bubble is an epic and each dot a task, coloured by the kind of work it is. Related work drifts together, red bands show epics that overlap, dashed bubbles are kinds of work no epic owns. Drag a dot into another epic to move it; the score shows whether that makes the epics more independent.</p>
         </div>
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+          <span className={`pill ${connected ? "accent" : unreachable ? "warn" : ""}`} title={unreachable ? "The model on this computer did not answer. pm-hub is using its own analysis." : undefined}>
+            {connected ? "✦ Qwen connected" : unreachable ? "✦ Qwen not answering" : "Local analysis"}
+          </span>
           <label className="check-row"><input id="em-open" type="checkbox" checked={openOnly} onChange={() => setOpenOnly(!openOnly)} /> Open work only</label>
           <button className="btn" onClick={() => canvas.current?.fit()}>Fit</button>
           <button className="btn" onClick={() => canvas.current?.relayout()}>Shuffle layout</button>
@@ -134,6 +158,7 @@ export function EpicMap({ project, mapping, draft, editor }: { project: Project;
                   <li key={o.a + o.b}>
                     <b>{Math.round(o.score * 100)}%</b> {title(o.a)} ↔ {title(o.b)}
                     {o.shared.length > 0 && <div className="muted">shared: {o.shared.join(", ")}</div>}
+                    {chat.whys.get(`${o.a}|${o.b}`) && <div className="muted">✦ {chat.whys.get(`${o.a}|${o.b}`)}</div>}
                   </li>
                 ))}
               </ul>
@@ -148,6 +173,7 @@ export function EpicMap({ project, mapping, draft, editor }: { project: Project;
                   <button className="emap-link" onClick={() => canvas.current?.focus(e.key)}>{e.title}</button>
                   <span className={`pill ${e.health === null ? "" : e.health >= 70 ? "good" : e.health >= 55 ? "warn" : "bad"}`}>{e.health ?? "—"}</span>
                   <div className="muted"><span className="emap-swatch" style={{ background: `var(--cat-${e.category})` }} /> {categoryName(e.category)} · {e.taskKeys.length} tasks{e.priority ? ` · ${e.priority}` : ""}{e.release ? ` · ${e.release}` : ""}</div>
+                  {chat.mixes.get(e.key) && <div className="muted">✦ {chat.mixes.get(e.key)}</div>}
                   {e.flags.length > 0 && <div className="muted emap-flags">{e.flags.join(" · ")}</div>}
                 </li>
               ))}

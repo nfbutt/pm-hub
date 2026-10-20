@@ -1,6 +1,6 @@
 # Epic Map: plan for the remaining phases
 
-This is the build plan for the rest of the Epic Map, written for whoever picks it up next. Phases 5 and 6 are done. Phases 7–8 below are still to build.
+This is the build plan for the rest of the Epic Map, written for whoever picks it up next. Phases 5, 6 and 7 are done. Phase 8 below is still to build.
 
 ## What exists (phase 5, done)
 
@@ -45,9 +45,29 @@ Goal: a deck of suggestion cards you can accept, reject or snooze, covering move
 - Splitting an epic always lowers the structure score, because modularity likes few large groups. The card says so honestly (`−6 score`) instead of pretending the split is a win.
 
 
-## Phase 7: Local Qwen (optional, opt-in)
+## Phase 7: Local Qwen (optional, opt-in) — done
 
 Goal: better similarity, category names, explanations and gap ideas from a model running on the user's own machine. Nothing goes to a hosted service.
+
+Built as described below, with these differences worth knowing:
+
+- **The client refuses any address that is not this computer.** `isLocalBase` only allows `localhost` and `127.0.0.1`, so a base URL that points somewhere else is never called. This is what makes the promise in the README true rather than aspirational.
+- **The two hooks are separate on purpose.** `useLocalVectors` only needs the project; `useLocalChat` needs the map. The map is built with the vectors, so one hook feeding the other would be a circle.
+- **Embedding cosines are stretched** (`denseScore` in `src/model/epicmap/text.ts`). They sit higher and narrower than TF-IDF ones, so one set of thresholds means the same thing in both spaces.
+- **Answers are cached** in IndexedDB by a hash of the prompt, so the model is asked once per question, not once per visit.
+
+| Area | Files | Notes |
+|---|---|---|
+| Client | `src/ai/local.ts` | `embed`, `chatJson`, `testConnection`, `isLocalBase`, the three answer checks and the prompts. A 20 s timeout; any failure comes back as `null`. |
+| Settings | `src/store/cache.ts` (`Prefs.local`), `src/views/Settings.tsx` | Off by default. A section with the address, the two model names and a "Test connection" button. |
+| Embeddings | `src/model/epicmap/index.ts`, `graph.ts`, `text.ts` | `analyze(project, mapping, {openOnly, vectors})` compares by meaning when every item has a vector. `buildEdgesFrom` builds the graph from a similarity function. |
+| Cache | `src/store/epicmap.ts` | `emap-vector:<hash>` for embeddings (the text is kept with the vector, so a hash clash cannot hand back the wrong one), `emap-chat:<hash>` for answers. |
+| Hooks | `src/views/useLocalModel.ts` | `useLocalVectors` and `useLocalChat`. |
+| UI | `src/views/EpicMap.tsx` | A pill in the header: "✦ Qwen connected", "✦ Qwen not answering" or "Local analysis". A ✦ marks anything the model wrote. The model's gap ideas join the deck as suggestions. |
+| CSP | `vite.config.ts` | `connect-src` allows `http://localhost:*` and `http://127.0.0.1:*`. |
+| Tests | `test/local.test.ts` | fetch is stubbed: a happy path, answers that do not pass the check being dropped, and the map still working when the endpoint is down. |
+
+### The plan as written
 
 1. **`src/ai/local.ts`:**
    - A client for an OpenAI-compatible endpoint: `POST {base}/embeddings`, and `POST {base}/chat/completions` with `response_format: {type:"json_object"}`.

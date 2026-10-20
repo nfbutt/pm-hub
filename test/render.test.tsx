@@ -40,6 +40,7 @@ describe("views render with the demo project", () => {
     expect(html).toContain("Suggestions");
     expect(html).toContain("Accept");
     expect(html).toContain("Snooze");
+    expect(html).toContain("Local analysis");
     const ro = renderToString(<EpicMap project={project} mapping={mapping} draft={emptyDraft()} />);
     expect(ro).toContain("Read-only");
     expect(ro).not.toContain("Accept");
