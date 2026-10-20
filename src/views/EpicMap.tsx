@@ -8,6 +8,7 @@ import { moveToParent } from "../model/edits";
 import type { Mapping } from "../model/mapping";
 import type { Project } from "../model/normalize";
 import type { Op } from "../model/ops";
+import { buildPlan } from "../model/plan/cpm";
 import { buildSchedule, findConflicts, type Draft } from "../model/schedule";
 import { rejectSuggestion, snoozeSuggestion, readSuggestionMemory } from "../store/epicmap";
 import { ItemDrawer } from "./ItemDrawer";
@@ -17,6 +18,7 @@ import type { DropTarget, MapCanvas } from "./epicmap/canvas";
 import { MeetingMode, type AgendaItem, type MeetingTally } from "./epicmap/MeetingMode";
 import { Suggestions } from "./epicmap/Suggestions";
 import { Timelapse } from "./epicmap/Timelapse";
+import { PlanProblems } from "./plan/PlanProblems";
 import { useLocalChat, useLocalVectors } from "./useLocalModel";
 import "./epicmap/epicmap.css";
 
@@ -118,6 +120,9 @@ export function EpicMap({ project, mapping, draft, editor, local, history, revie
 
   const schedule = useMemo(() => buildSchedule(project, mapping, draft), [project, mapping, draft]);
   const original = useMemo(() => buildSchedule(editor?.base ?? project, mapping), [editor?.base, project, mapping]);
+  // Whether the plan can work as written: the epic structure is one half, the dates and
+  // the links between the epics are the other.
+  const plan = useMemo(() => buildPlan(project, mapping, schedule), [project, mapping, schedule]);
   const openItem = open ? schedule.byKey.get(open) : null;
   const preview = hover ? scoreIfMoved(model, hover.key, hover.target ?? null) : null;
   const delta = preview !== null && model.score !== null ? preview - model.score : null;
@@ -204,6 +209,8 @@ export function EpicMap({ project, mapping, draft, editor, local, history, revie
             readOnly={!editor}
             highlight={lit}
           />
+
+          <PlanProblems plan={plan} onFocus={keys => canvas.current?.focusMany(keys)} />
 
           {model.overlaps.length > 0 && (
             <section className="card pad">

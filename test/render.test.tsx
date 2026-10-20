@@ -20,6 +20,7 @@ import { buildSchedule } from "../src/model/schedule";
 import { Dependencies, layoutGraph } from "../src/views/Dependencies";
 import { EpicMap } from "../src/views/EpicMap";
 import { MeetingMode } from "../src/views/epicmap/MeetingMode";
+import { Roadmap } from "../src/views/Roadmap";
 import { BurnUp } from "../src/views/BurnUp";
 import { Confidence } from "../src/views/Confidence";
 import { Progress } from "../src/views/Progress";
@@ -56,6 +57,13 @@ describe("views render with the demo project", () => {
     expect(html).toContain("Offline mode");
     expect(html).toContain("Item 1 of 1");
     expect(html).toContain("So far");
+  });
+
+  it("Roadmap puts every epic on a timeline and says whether the plan works", () => {
+    const html = renderToString(<Roadmap project={project} mapping={mapping} draft={emptyDraft()} zoom="month" today="2026-10-19" />);
+    expect(html).toContain("Roadmap");
+    expect(html).toContain("Can this plan work?");
+    expect(html).toContain("road-row");
   });
 
   it("Overview", () => {

@@ -1,6 +1,8 @@
 # Epic Map: plan for the remaining phases
 
-This is the build plan for the rest of the Epic Map, written for whoever picks it up next. Phases 5, 6, 7 and 8 are done.
+This is the build plan for the rest of the Epic Map, written for whoever picks it up next. Phases 5, 6, 7 and 8 are done. Phase 9 (the plan engine, the Roadmap and the model's suggestions) is built too — see the end of this file.
+
+The research behind phase 9 is in `reports/AI assisted roadmap planning.md`, with the notes in `research_notes/AI assisted roadmap planning/`.
 
 ## What exists (phase 5, done)
 
@@ -122,3 +124,48 @@ Goal: run the Epic Map as a meeting, look at how the plan changed over time, and
 - The category keywords in `categories.ts` are fixed. An editable dictionary (stored per project) belongs in Phase 6 or 7.
 - Pull requests are left out of the map, because GitHub PRs can't have a parent issue.
 - The structure score is modularity, and modularity likes few large groups: splitting an epic always lowers it a little, even when the split is right.
+
+## Phase 9: the plan engine, the Roadmap and the model's suggestions — done
+
+The re-assessment asked for one thing: make the Epic Map useful for **clarifying how a project will actually be executed** — organising epics, roadmaps and Gantt charts — and use AI to work out milestones and dependencies.
+
+### What the research said (see `reports/AI assisted roadmap planning.md`)
+
+- **The LLM drafts; the solver computes.** In every tool that ships this, dependency shifting, critical path and auto-scheduling are deterministic, and the model only proposes. "LLMs are weak plan generators and strong proposal generators."
+- **Schema-valid is not semantically correct.** Constrained JSON output fixes parsing, not meaning: the strongest models were measured at ~100% schema validity and ~80% semantic success on structured calls.
+- **Validate with a solver, never self-critique.** Self-verification measurably hurts. For a dependency graph the external verifier is free: acyclicity, referential integrity and an evidence check.
+- **Show verifiability, not confidence.** A model's verbalised confidence is miscalibrated and unstable; what you can check yourself (a real issue, a real quote) is a better signal.
+- **Cheap acceptance must be paired with cheap, no-blame rejection.** Forcing people to justify turning a suggestion down makes them rubber-stamp the rest.
+- **Partial rationale beats a full narrative.** Explanations change reliance without improving discrimination: show *what to check*.
+- **A single trust badge does not fit both jobs.** Estimating a duration reads objective; prioritising a roadmap reads subjective.
+- **CPM is still the right algorithm**: forward pass, backward pass, `total float = LS − ES`, zero float marks the critical chain. Smoothing, not levelling, is the safe default because levelling can move the critical path.
+
+### What was built
+
+| Area | Files | Notes |
+|---|---|---|
+| Plan engine (pure) | `src/model/plan/cpm.ts` | `buildPlan(project, mapping, schedule)`: the epic-level dependency graph (a link between two stories is a link between their epics), a forward and backward pass, total float, the critical chain, and the reasons a plan cannot work: a loop, an epic that starts before its blocker is finished, work that finishes after its release is due, epics with no dates or no release. |
+| Checks (pure) | `src/model/plan/infer.ts` | `checkLinks` and `checkReleases`: the gate every model proposal passes. Real items, still open, not already linked, no loop, and **the reason has to be a quote that really appears in one of the two items**. Everything else is dropped, with the reason why. |
+| Prompts | `src/ai/local.ts` | `promptDependencies` and `promptReleases`, with the answer checks. The model is shown the pairs the plan already thinks are related, so it judges what is in front of it instead of inventing work. |
+| Roadmap | `src/views/Roadmap.tsx` | Every epic on one timeline, with the dependencies drawn as arrows, the critical chain in red, the release markers, and how much slack each epic has. A new tab, between Epic Map and Status & workload. |
+| Plan panel | `src/views/plan/PlanProblems.tsx`, `PlanCheck.tsx` | "Can this plan work?" and "What the model spotted". The problems card is used by both the Roadmap and the Epic Map, so a problem reads the same wherever it is seen. |
+| Hook | `src/views/usePlanSuggestions.ts` | Asks the model, checks everything it says, and hands back only what passes. Answers are cached, so the model is asked once. |
+| Edits | `src/model/edits.ts` | `setRelease`: puts an item in a release using the project's own release rule. No new kind of op. |
+| Tests | `test/plan.test.ts` | The chain, the slack, the three kinds of broken plan, and every way a model proposal is dropped. |
+
+### What it deliberately does not do
+
+- **It never applies anything by itself.** Every suggestion is a click, and every click is an ordinary recorded change, so undo works.
+- **It does not show a confidence badge.** The card shows the quote and the two issues, so the reader can check it in one glance.
+- **It does not invent milestones.** GitHub milestones cannot be created through the API pm-hub uses, so the model may only group work into releases that already exist.
+- **It does not estimate dates.** A model's duration is optimistic and unbounded; the plan engine works with the dates you have.
+
+### What is next, in order of value
+
+1. **A working calendar.** The bars are drawn on plain calendar days, so a plan that runs through weekends is wrong in a way every reviewer spots — and it quietly lengthens the critical chain. Skipping Saturdays and Sundays in the forward and backward passes is the single highest-value change that needs no model at all. It touches `src/model/schedule.ts` and everything that reads it, so it wants its own phase.
+2. **Releases without a due date.** A single-select "Release" field has no due date, so the plan cannot be checked against it. Reading the due date from the epic's own end date, or from a milestone, would give the check something to check against.
+3. **Two-stage release grouping.** The model currently names the groups itself, which can churn between runs. The safer recipe is for the model to label each piece of work with a small closed theme and for pm-hub to cluster on that label deterministically, so the phasing is reproducible and can be re-derived after any edit.
+4. **Effort as a distribution.** Ask for three points (optimistic, most likely, pessimistic) and compute the expected value and spread in the browser with PERT. Never a single committed date.
+5. **Link types and lag.** GitHub only has "blocked by" (finish to start), so there is nothing to write back yet; the plan model would need a signed lag per link before it could say anything about a two-day gap.
+
+

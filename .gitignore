@@ -7,3 +7,5 @@ coverage
 # Never commit real project snapshots; tests use the synthetic fixture only.
 snapshots/
 *.tsbuildinfo
+# Research notes (the raw notes behind reports/). The report itself is kept.
+research_notes/
