@@ -48,11 +48,26 @@ export const canRedo = (st: ScenarioStore) => { const s = activeScenario(st); re
 export const undo = (st: ScenarioStore) => (canUndo(st) ? updateActive(st, s => ({ ...s, cursor: s.cursor - 1 })) : st);
 export const redo = (st: ScenarioStore) => (canRedo(st) ? updateActive(st, s => ({ ...s, cursor: s.cursor + 1 })) : st);
 
+/** Does this operation touch the item? */
+function touches(op: Op, key: string): boolean {
+  if (!("key" in op)) return false;
+  if (op.key === key) return true;
+  return (op.kind === "addBlockedBy" || op.kind === "removeBlockedBy") && op.blocker === key;
+}
+
+/**
+ * The operations that discarding this item would drop. They are kept so the toast's Undo
+ * can put them back: discarding used to delete them for good.
+ */
+export function discardOps(s: Scenario, key: string): Op[] {
+  return activeChanges(s).flatMap(c => c.ops).filter(o => touches(o, key));
+}
+
 /** Removes every change touching these items from the active scenario (back to GitHub). */
 export function discardItem(st: ScenarioStore, key: string): ScenarioStore {
   return updateActive(st, s => {
     const kept = activeChanges(s)
-      .map(c => ({ ...c, ops: c.ops.filter(o => !("key" in o) || (o.key !== key && !(o.kind === "addBlockedBy" || o.kind === "removeBlockedBy" ? o.blocker === key : false))) }))
+      .map(c => ({ ...c, ops: c.ops.filter(o => !touches(o, key)) }))
       .filter(c => c.ops.length);
     return { ...s, changes: kept, cursor: kept.length };
   });
@@ -96,7 +111,13 @@ export function migrateLegacyDraft(draft: Draft, base: Project, m: Mapping): Sce
 export function removeSlots(st: ScenarioStore, slots: Set<string>): ScenarioStore {
   if (!slots.size) return st;
   return updateActive(st, s => {
-    const kept = activeChanges(s).map(c => ({ ...c, ops: c.ops.filter(o => !slots.has(slotOf(o))) })).filter(c => c.ops.length);
+    // An op that points at an item this apply created is dropped too: the item now has
+    // a real GitHub key, so the op could never be applied.
+    const gone = new Set<string>();
+    for (const c of activeChanges(s)) for (const o of c.ops) if (o.kind === "create" && slots.has(slotOf(o))) gone.add(o.key);
+    const kept = activeChanges(s)
+      .map(c => ({ ...c, ops: c.ops.filter(o => !slots.has(slotOf(o)) && !("key" in o && gone.has(o.key))) }))
+      .filter(c => c.ops.length);
     return { ...s, changes: kept, cursor: kept.length };
   });
 }

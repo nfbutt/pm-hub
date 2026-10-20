@@ -3,6 +3,7 @@
 import type { GitHubClient } from "../github/client";
 import { createJson, exists, createFile, listDir, readJson } from "../github/contents";
 import type { Baseline } from "../model/diff";
+import type { Op } from "../model/ops";
 import { get as idbGet, set as idbSet } from "idb-keyval";
 
 export type HistoryConfig = { mode: "local" } | { mode: "github"; repo: string; dir: string };
@@ -10,6 +11,15 @@ export type HistoryConfig = { mode: "local" } | { mode: "github"; repo: string; 
 export interface ChangeRecord {
   version: 1; at: string; author: string | null; scenario: string;
   steps: { label: string; status: string; message?: string; reason?: string; kind: string; key?: string }[];
+  /**
+   * The operations that were applied, so the change can be rolled back days later. Older
+   * records do not have them and cannot be rolled back.
+   */
+  ops?: Op[];
+  /** Draft key -> the GitHub key, for the items this change created. */
+  keys?: Record<string, string>;
+  /** Item key -> the ids GitHub uses, so an archived item can still be addressed. */
+  ids?: Record<string, { item: string; content: string }>;
 }
 
 export interface BaselineMeta { id: string; name: string; savedAt: string; auto: boolean }

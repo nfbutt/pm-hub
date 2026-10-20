@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Mapping } from "../model/mapping";
 import type { Project } from "../model/normalize";
-import { applyOps, describe, netOps, type Applied, type Op } from "../model/ops";
+import { applyOps, describe, foldOps, netOps, type Applied, type Op } from "../model/ops";
 import {
-  activeOps, activeScenario, addScenario, canRedo, canUndo, clearActive, discardItem, emptyStore, migrateLegacyDraft,
+  activeChanges, activeOps, activeScenario, addScenario, canRedo, canUndo, clearActive, discardItem, discardOps, emptyStore, migrateLegacyDraft,
   record, redo, removeScenario, removeSlots, renameScenario, switchScenario, undo, type ScenarioStore,
 } from "../model/scenarios";
 import { deleteLegacyDraft, readChanges, readDraft, UNAVAILABLE, writeChanges } from "../store/cache";
@@ -27,6 +27,8 @@ export interface ChangeSetState {
   applied: Applied | null;
   /** Net changes after folding repeated edits. */
   net: Op[];
+  /** The net changes, grouped by the change they came from, so a bulk change is one row. */
+  groups: { id: string; label: string; ops: Op[] }[];
   editor: Editor | null;
   undo: () => void; redo: () => void; canUndo: boolean; canRedo: boolean;
   clear: () => void;
@@ -38,13 +40,13 @@ export interface ChangeSetState {
     switchTo: (id: string) => void; add: (name: string, copy: boolean) => void; rename: (id: string, name: string) => void; remove: (id: string) => void;
   };
   /** The last action, for the undo toast. */
-  lastAction: { label: string; at: number } | null;
+  lastAction: { label: string; at: number; undo?: () => void } | null;
 }
 
 export function useChangeSet(owner: string, number: number, base: Project | null, mapping: Mapping | null): ChangeSetState {
   const [store, setStore] = useState<ScenarioStore>(emptyStore);
   const [ready, setReady] = useState(false);
-  const [lastAction, setLastAction] = useState<{ label: string; at: number } | null>(null);
+  const [lastAction, setLastAction] = useState<{ label: string; at: number; undo?: () => void } | null>(null);
   const loaded = useRef(false);
   const persist = useRef(true);
   const [persistent, setPersistent] = useState(true);
@@ -68,6 +70,8 @@ export function useChangeSet(owner: string, number: number, base: Project | null
     })();
   }, [owner, number, base, mapping]);
 
+  const storeRef = useRef(store);
+  storeRef.current = store;
   const update = useCallback((f: (s: ScenarioStore) => ScenarioStore) => {
     setStore(prev => { const next = f(prev); if (next !== prev && persist.current) void writeChanges(owner, number, next); return next; });
   }, [owner, number]);
@@ -76,18 +80,43 @@ export function useChangeSet(owner: string, number: number, base: Project | null
   const ops = useMemo(() => activeOps(scenario), [scenario]);
   const applied = useMemo(() => (base ? applyOps(base, ops) : null), [base, ops]);
   const net = useMemo(() => netOps(ops), [ops]);
+  // The same folding, but each change kept apart, so a change of forty items is one row
+  // in the review rather than forty.
+  const groups = useMemo(() => {
+    const folded = foldOps(activeChanges(scenario).flatMap(c => c.ops.map(op => ({ change: c, op }))));
+    const byChange = new Map<string, { id: string; label: string; ops: Op[] }>();
+    for (const { change, op } of folded) {
+      if (!change) continue;
+      const g = byChange.get(change.id) ?? { id: change.id, label: change.label, ops: [] };
+      g.ops.push(op);
+      byChange.set(change.id, g);
+    }
+    return [...byChange.values()];
+  }, [scenario]);
 
   const titleOf = useCallback((key: string) => applied?.project.items.find(i => i.key === key)?.title ?? base?.items.find(i => i.key === key)?.title ?? key, [applied, base]);
 
   const editor = useMemo<Editor | null>(() => (base ? {
     base,
     record: (label, newOps) => { if (!newOps.length) return; update(s => record(s, label, newOps)); setLastAction({ label, at: Date.now() }); },
-    discard: key => { update(s => discardItem(s, key)); setLastAction({ label: `Reverted ${titleOf(key)} to GitHub`, at: Date.now() }); },
+    discard: key => {
+      // Keep what was dropped, so the toast's Undo puts it back instead of undoing
+      // some earlier change.
+      const removed = discardOps(activeScenario(storeRef.current), key);
+      update(s => discardItem(s, key));
+      setLastAction({
+        label: `Reverted ${titleOf(key)} to GitHub`, at: Date.now(),
+        undo: removed.length ? () => {
+          update(s => record(s, `Restored ${titleOf(key)}`, removed));
+          setLastAction({ label: `Restored ${titleOf(key)}`, at: Date.now() });
+        } : undefined,
+      });
+    },
     titleOf,
   } : null), [base, update, titleOf]);
 
   return {
-    ready, persistent, store, applied, net, editor,
+    ready, persistent, store, applied, net, groups, editor,
     undo: () => { if (canUndo(store)) { const c = scenario.changes[scenario.cursor - 1]; update(undo); setLastAction(c ? { label: `Undid: ${c.label}`, at: Date.now() } : null); } },
     redo: () => { if (canRedo(store)) { const c = scenario.changes[scenario.cursor]; update(redo); setLastAction(c ? { label: `Redid: ${c.label}`, at: Date.now() } : null); } },
     canUndo: canUndo(store), canRedo: canRedo(store),

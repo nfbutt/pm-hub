@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  buildSteps, checkStep, endSlip, execute, fetchCurrent, fetchRepoMeta, involvedKeys, postStatusUpdate, type Call, type RepoMeta, type Step,
+  archivedIds, buildSteps, checkStep, endSlip, execute, fetchCurrent, fetchRepoMeta, involvedKeys, postStatusUpdate,
+  type Call, type RepoMeta, type Step,
 } from "../github/apply";
 import { writeAccess, type GitHubClient } from "../github/client";
 import type { Item, Project } from "../model/normalize";
-import { inverse, isNewKey, remapKeys, slotOf, type Op } from "../model/ops";
+import { remapKeys, slotOf, type Op } from "../model/ops";
+import { rollbackOps } from "../model/rollback";
 import { Modal } from "../ui/Drawer";
 import { snapshot } from "../model/diff";
 import type { Mapping } from "../model/mapping";
@@ -19,7 +21,8 @@ const STATUS: Record<Step["status"], [string, string]> = {
 
 interface Props {
   base: Project;
-  net: Op[];
+  /** The pending changes, grouped by the change they came from. */
+  groups: { id: string; label: string; ops: Op[] }[];
   titleOf: (key: string) => string;
   client: GitHubClient | null;
   /** Called after an apply with the slots to drop from the draft and the ops that would undo it. */
@@ -34,10 +37,12 @@ interface Props {
   scenario: string;
 }
 
-export function Review({ base, net, titleOf, client, onApplied, onRecord, refresh, goBack, mapping, history, scenario }: Props) {
+export function Review({ base, groups, titleOf, client, onApplied, onRecord, refresh, goBack, mapping, history, scenario }: Props) {
+  const ops = useMemo(() => groups.flatMap(g => g.ops), [groups]);
   const [histNote, setHistNote] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>("checking");
-  const [steps, setSteps] = useState<Step[]>([]);
+  // The changes are shown straight away; the check against GitHub fills in their status.
+  const [steps, setSteps] = useState<Step[]>(() => buildSteps(ops, titleOf));
   const [error, setError] = useState<string | null>(null);
   const [dry, setDry] = useState<Call[] | null>(null);
   const [revertOps, setRevertOps] = useState<Op[]>([]);
@@ -48,12 +53,12 @@ export function Review({ base, net, titleOf, client, onApplied, onRecord, refres
   // Check every change against what GitHub has right now.
   async function check() {
     setPhase("checking"); setError(null);
-    const fresh = buildSteps(net, titleOf);
+    const fresh = buildSteps(ops, titleOf);
     if (!client) { setSteps(fresh); setPhase("ready"); return; }
     try {
-      const current = await fetchCurrent(client, base, involvedKeys(net));
+      const current = await fetchCurrent(client, base, involvedKeys(ops), archivedIds(ops));
       const repoNames = new Set<string>();
-      for (const op of net) {
+      for (const op of ops) {
         if (op.kind === "create" && op.item.repo) repoNames.add(op.item.repo);
         if (op.kind === "setLabels" || op.kind === "setMilestone" || op.kind === "setAssignees") { const r = (current.get(op.key) ?? base.items.find(i => i.key === op.key))?.repo; if (r) repoNames.add(r); }
       }
@@ -77,11 +82,12 @@ export function Review({ base, net, titleOf, client, onApplied, onRecord, refres
   const patch = (id: string, p: Partial<Step>) => setSteps(ss => ss.map(s => (s.id === id ? { ...s, ...p } : s)));
   const writable = steps.filter(s => s.status !== "local");
   const toApply = writable.filter(s => s.include && (s.status === "ready" || s.status === "conflict" || s.status === "failed"));
-  const groups = useMemo(() => {
-    const g = new Map<string, Step[]>();
-    for (const s of steps) { const k = "key" in s.op ? s.op.key : `lane:${s.op.lane}`; if (!g.has(k)) g.set(k, []); g.get(k)!.push(s); }
-    return [...g.entries()];
-  }, [steps]);
+  // The steps, split back into the changes they came from: a change of forty items is
+  // one group, not forty.
+  const stepGroups = useMemo(() => {
+    let at = 0;
+    return groups.map(g => { const ss = steps.slice(at, at + g.ops.length); at += g.ops.length; return { ...g, steps: ss }; });
+  }, [groups, steps]);
 
   async function apply(dryRun: boolean) {
     if (!client) return;
@@ -100,22 +106,31 @@ export function Review({ base, net, titleOf, client, onApplied, onRecord, refres
     const res = await execute(client, base, run, ctx.current.current, ctx.current.repos, { onStep: s => patch(s.id, { status: s.status, message: s.message }) });
     // Map draft keys of created items to their new GitHub keys, so the revert can find them.
     const keyMap = new Map<string, string>();
-    for (const [k, c] of res.created) { const op = net.find(o => o.kind === "create" && o.key === k) as Extract<Op, { kind: "create" }> | undefined; if (op?.item.repo) keyMap.set(k, `${op.item.repo}#${c.number}`); }
+    for (const [k, c] of res.created) { const op = ops.find(o => o.kind === "create" && o.key === k) as Extract<Op, { kind: "create" }> | undefined; if (op?.item.repo) keyMap.set(k, `${op.item.repo}#${c.number}`); }
     const applied = res.steps.filter(s => s.status === "applied");
     const done = new Set(applied.map(s => slotOf(s.op)));
-    const revert = applied.filter(s => s.message !== "Already like this on GitHub.").map(s => remapKeys(inverse(s.op), keyMap)).reverse();
+    // The ids GitHub knows the items by, so a rollback can address an item that is only
+    // out of the project.
+    const ids: Record<string, { item: string; content: string }> = {};
+    for (const [k, item] of ctx.current.current) ids[k] = { item: item.id, content: item.ids.content ?? "" };
+    for (const [k, c] of res.created) { const real = keyMap.get(k); if (real) ids[real] = { item: c.itemId, content: c.contentId }; }
+    const revert = rollbackOps({ ops: applied.filter(s => s.message !== "Already like this on GitHub.").map(s => s.op), keys: Object.fromEntries(keyMap), ids });
     setRevertOps(revert);
     if (status.post && applied.length) {
       try { await postStatusUpdate(client, base.id, status.value, status.body || summary(applied)); } catch { /* reported below */ }
     }
     if (history) {
       try {
+        // The operations and the ids are kept with the record: GitHub has no undo, so
+        // this is the only way back to what the plan looked like.
         await history.saveChange({
           version: 1, at: new Date().toISOString(), author: history.author, scenario,
           steps: res.steps.filter(s => s.status !== "local").map(s => ({
             label: s.label, status: s.status, kind: s.op.kind, ...("key" in s.op ? { key: s.op.key } : {}),
             ...(s.message ? { message: s.message } : {}), ...(s.reason ? { reason: s.reason } : {}),
           })),
+          ops: applied.map(s => remapKeys(s.op, keyMap)),
+          ids,
         });
       } catch (e) { notes.push(`the change record (${e instanceof Error ? e.message : "unknown error"})`); }
       if (notes.length) setHistNote(`Your changes were applied, but pm-hub couldn't save ${notes.join(" or ")} to the plan history.`);
@@ -144,15 +159,15 @@ export function Review({ base, net, titleOf, client, onApplied, onRecord, refres
       {!client && <div className="callout info">This is demo data, so nothing can be written. Use <b>Dry run</b> to see exactly what would be sent.</div>}
       {client && access === "no" && <div className="callout warn">This token can only read. To apply changes, create a token with the <b>project</b> and <b>repo</b> scopes, then sign in again.</div>}
       {error && <div className="callout bad">{error} <button className="btn" onClick={() => void check()}>Check again</button></div>}
-      {phase === "checking" && <p className="muted">Checking {net.length} change{net.length === 1 ? "" : "s"} against GitHub…</p>}
-      {net.length === 0 && phase === "ready" && steps.length === 0 && <div className="card pad"><p>No changes to review.</p></div>}
+      {phase === "checking" && <p className="muted">Checking {ops.length} change{ops.length === 1 ? "" : "s"} against GitHub…</p>}
+      {ops.length === 0 && phase === "ready" && steps.length === 0 && <div className="card pad"><p>No changes to review.</p></div>}
 
-      {phase !== "checking" && groups.length > 0 && (
+      {stepGroups.length > 0 && (
         <section className="card review">
-          {groups.map(([key, ss]) => (
-            <div key={key} className="rv-group">
-              <h3>{key.startsWith("lane:") ? `Order of ${key.slice(5)}` : titleOf(key)} {isNewKey(key) && <span className="pill accent">new</span>}</h3>
-              {ss.map(s => {
+          {stepGroups.map(g => (
+            <div key={g.id} className="rv-group">
+              <h3>{g.label} <span className="muted">{g.steps.length} change{g.steps.length === 1 ? "" : "s"}</span></h3>
+              {g.steps.map(s => {
                 const slip = endSlip(s.op);
                 const [cls, label] = STATUS[s.status];
                 return (
@@ -199,7 +214,7 @@ export function Review({ base, net, titleOf, client, onApplied, onRecord, refres
         </section>
       )}
 
-      {phase === "ready" && net.length > 0 && (
+      {phase === "ready" && ops.length > 0 && (
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <button className="btn primary" disabled={!client || access === "no" || toApply.length === 0} onClick={() => void apply(false)}>
             Apply {toApply.length} change{toApply.length === 1 ? "" : "s"} to GitHub
@@ -216,7 +231,12 @@ export function Review({ base, net, titleOf, client, onApplied, onRecord, refres
           {histNote && <span>{histNote}</span>}
           <span>{failed ? "Failed changes stay in your draft so you can fix and retry them." : "Your draft now holds only what wasn't sent."} The project is refreshing from GitHub.</span>
           <div style={{ display: "flex", gap: 8 }}>
-            {revertOps.length > 0 && <button className="btn" onClick={() => { onRecord(`Revert of the apply at ${new Date().toLocaleTimeString()}`, revertOps); setRevertOps([]); }}>Prepare a revert of this apply</button>}
+            {revertOps.length > 0 && (
+              <>
+                <button className="btn" onClick={() => { onRecord(`Revert of the apply at ${new Date().toLocaleTimeString()}`, revertOps); setRevertOps([]); }}>Prepare a revert of this apply</button>
+                <span className="muted" style={{ fontSize: 12 }}>GitHub cannot undo a creation, so any issue this created is closed and taken out of the project. It stays in the repository, closed.</span>
+              </>
+            )}
             <button className="btn primary" onClick={goBack}>Done</button>
           </div>
         </div>

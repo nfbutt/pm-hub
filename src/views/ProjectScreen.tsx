@@ -171,7 +171,7 @@ export function ProjectScreen({ source, view, onSignOut }: { source: Source; vie
                 onCompare={(id, b) => { compareTo(id, b); if (id) location.hash = hrefFor(routeFor("gantt")); }} settingsHref={hrefFor(routeFor("settings"))} />
             )}
             {active === "review" && project && cs.editor && (
-              <Review key={cs.scenarios.active} base={project} net={cs.net} titleOf={cs.editor.titleOf} client={source.kind === "github" ? source.client : null}
+              <Review key={cs.scenarios.active} base={project} groups={cs.groups} titleOf={cs.editor.titleOf} client={source.kind === "github" ? source.client : null}
                 onApplied={slots => cs.removeSlots(slots)} onRecord={(label, ops) => cs.editor!.record(label, ops)} refresh={state.refresh}
                 mapping={mapping} history={history} scenario={cs.scenarios.list.find(s => s.id === cs.scenarios.active)?.name ?? "Default"}
                 goBack={() => { location.hash = hrefFor(routeFor("gantt")); }} />
@@ -181,7 +181,8 @@ export function ProjectScreen({ source, view, onSignOut }: { source: Source; vie
                 repos={[...new Set(project.items.map(i => i.repo).filter((r): r is string => !!r))].sort()} />} />}
           </>
         )}
-        <UndoToast action={cs.lastAction} onUndo={cs.undo} canUndo={cs.canUndo && !githubOnly} />
+        <UndoToast action={cs.lastAction} onUndo={() => { const u = cs.lastAction?.undo; if (u) u(); else cs.undo(); }}
+          canUndo={(cs.canUndo || !!cs.lastAction?.undo) && !githubOnly} />
         {menuOpen && shown && mapping && (
           <CommandMenu project={shown} mapping={mapping} editor={editor} selected={selected} onSelect={setSelected}
             views={TABS} go={v => { location.hash = hrefFor(routeFor(v as ViewId)); }}

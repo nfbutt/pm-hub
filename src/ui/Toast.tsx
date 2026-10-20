@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 /** A bottom-corner notice for the last action, with Undo. Hides itself after a few seconds. */
-export function UndoToast({ action, onUndo, canUndo }: { action: { label: string; at: number } | null; onUndo: () => void; canUndo: boolean }) {
+export function UndoToast({ action, onUndo, canUndo }: { action: { label: string; at: number; undo?: () => void } | null; onUndo: () => void; canUndo: boolean }) {
   const [shown, setShown] = useState<number | null>(null);
   useEffect(() => {
     if (!action) return;
