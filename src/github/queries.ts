@@ -74,7 +74,7 @@ const ITEM = `
   content {
     __typename
     ... on Issue {
-      id number title url state stateReason createdAt closedAt updatedAt
+      id number title body url state stateReason createdAt closedAt updatedAt
       repository { id nameWithOwner }
       labels(first: 30) { nodes { id name color } }
       assignees(first: 10) { nodes { id login avatarUrl } }
@@ -92,7 +92,7 @@ const ITEM = `
       milestone { id title number dueOn state }
     }
     ... on DraftIssue {
-      id title createdAt updatedAt
+      id title body createdAt updatedAt
       assignees(first: 10) { nodes { id login avatarUrl } }
     }
   }

@@ -44,6 +44,8 @@ export interface Item {
   number: number | null;
   repo: string | null;
   title: string;
+  /** Issue or draft description, trimmed. Missing on projects cached before the Epic Map. */
+  body?: string;
   url: string | null;
   state: "open" | "closed" | "merged";
   stateReason: string | null;
@@ -66,6 +68,9 @@ export interface Project {
   id: string; owner: string; number: number; title: string; url: string; description: string | null;
   fields: FieldDef[]; items: Item[]; loadedAt: string;
 }
+
+const BODY_MAX = 2000;
+const clipBody = (b: string | null | undefined) => (b ? b.slice(0, BODY_MAX) : undefined);
 
 export const issueKey = (repo: string, number: number) => `${repo}#${number}`;
 
@@ -138,7 +143,7 @@ export function normalizeItem(raw: RawItem): Item {
 
   if (c.__typename === "DraftIssue") {
     return {
-      ...base, key: raw.id, kind: "draft", number: null, repo: null, title: c.title, url: null, state: "open",
+      ...base, key: raw.id, kind: "draft", number: null, repo: null, title: c.title, body: clipBody(c.body), url: null, state: "open",
       createdAt: c.createdAt, closedAt: null, updatedAt: c.updatedAt, assignees: c.assignees.nodes.map(a => a.login),
       ids: { ...emptyIds(), content: c.id ?? null, assignees: idMap(c.assignees.nodes, a => a.login) },
     };
@@ -159,7 +164,7 @@ export function normalizeItem(raw: RawItem): Item {
     return { ...common, kind: "pr", state: c.state === "MERGED" ? "merged" : c.state === "CLOSED" ? "closed" : "open" };
   }
   return {
-    ...common, kind: "issue", state: c.state === "CLOSED" ? "closed" : "open", stateReason: c.stateReason,
+    ...common, kind: "issue", state: c.state === "CLOSED" ? "closed" : "open", stateReason: c.stateReason, body: clipBody(c.body),
     issueType: c.issueType?.name ?? null,
     parentKey: c.parent ? issueKey(c.parent.repository.nameWithOwner, c.parent.number) : null,
     ids: { ...common.ids, parent: c.parent?.id ?? null },

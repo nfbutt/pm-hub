@@ -53,7 +53,7 @@ interface RawLabel { id?: string; name: string; color: string }
 
 export type RawContent =
   | {
-      __typename: "Issue"; id?: string; number: number; title: string; url: string; state: "OPEN" | "CLOSED"; stateReason: string | null;
+      __typename: "Issue"; id?: string; number: number; title: string; body?: string | null; url: string; state: "OPEN" | "CLOSED"; stateReason: string | null;
       createdAt: string; closedAt: string | null; updatedAt: string; repository: RawRepoRef;
       labels: { nodes: RawLabel[] }; assignees: { nodes: RawPerson[] };
       milestone: RawMilestone | null; issueType: { name: string } | null;
@@ -66,7 +66,7 @@ export type RawContent =
       createdAt: string; closedAt: string | null; updatedAt: string; repository: RawRepoRef;
       labels: { nodes: RawLabel[] }; assignees: { nodes: RawPerson[] }; milestone: RawMilestone | null;
     }
-  | { __typename: "DraftIssue"; id?: string; title: string; createdAt: string; updatedAt: string; assignees: { nodes: RawPerson[] } }
+  | { __typename: "DraftIssue"; id?: string; title: string; body?: string | null; createdAt: string; updatedAt: string; assignees: { nodes: RawPerson[] } }
   | null;
 
 export interface RawItem {
