@@ -18,6 +18,7 @@ The Epic Map is four views that answer four questions about a plan:
 | **Roadmap** (`/roadmap`) | Will the plan *execute*? Every epic on one timeline with the dependencies between them, the chain that decides when the plan ends, how much slack each epic has, and what is broken about the plan as it stands. |
 | **Gantt** (`/gantt`) | What is the work itself? Bars you can drag, the dependencies drawn between them, the chain that decides the end date marked, conflicts, baselines, releases. |
 | **Planner** (`/planner`) | What should the plan *be*? Describe it — by typing or by speaking — and a model on this computer drafts the epics, stories, dates, release and dependencies. You read it, tick what you want, and it becomes one change. |
+| **Compare** (`/compare`) | What do these two epics cover, what do they have in common, and what does only one of them have? Drag a story from one to the other to move it. |
 
 The first three share one engine. `src/model/plan/cpm.ts` turns the epics, their dates and the links between them into a forward and a backward pass, total float per epic, the critical chain, and four kinds of broken plan (a loop, an epic that starts before its blocker is finished, work that finishes after its release is due, and epics with no dates or no release). The Epic Map and the Roadmap both show those problems, worded the same way, and the Gantt draws the chain.
 
