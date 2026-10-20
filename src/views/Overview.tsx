@@ -74,7 +74,7 @@ export function Overview({ project, mapping }: { project: Project; mapping: Mapp
                   <tr key={e.id}>
                     <td>{e.url ? <a href={e.url} target="_blank" rel="noopener noreferrer">{e.title}</a> : e.title} <span className="muted num" style={{ fontSize: 11 }}>{e.key}</span></td>
                     <td>{laneOf(e, mapping) ?? <span className="muted">—</span>}</td>
-                    <td style={{ minWidth: 120 }}><div className="progress" aria-label={`${pct}% done`}><span style={{ width: `${pct}%` }} /></div></td>
+                    <td style={{ minWidth: 120 }}><div className="progress" role="img" aria-label={`${pct}% done`}><span style={{ width: `${pct}%` }} /></div></td>
                     <td className="num">{e.subIssues ? `${e.subIssues.completed}/${e.subIssues.total}` : "—"}</td>
                   </tr>
                 );

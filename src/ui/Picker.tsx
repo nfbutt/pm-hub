@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 
 export interface PickOption { value: string; label: string; hint?: string; /** Always shown at the top, whatever is typed. */ pinned?: boolean }
 
@@ -15,6 +15,7 @@ export function PickList({ options, onPick, placeholder = "Search…", selected 
   const setQ = (next: string) => { if (value === undefined) setOwn(next); onQuery?.(next); };
   const [hi, setHi] = useState(0);
   const listRef = useRef<HTMLUListElement>(null);
+  const listId = useId();
   const shown = useMemo(() => {
     const words = q.toLowerCase().split(/\s+/).filter(Boolean);
     // A pinned option is always there: it is the thing the person was trying to say.
@@ -32,10 +33,11 @@ export function PickList({ options, onPick, placeholder = "Search…", selected 
   return (
     <div className="picklist">
       <input className="input" autoFocus={autoFocus} placeholder={placeholder} value={q} onChange={e => setQ(e.target.value)} onKeyDown={onKey}
-        aria-label={placeholder} role="combobox" aria-expanded="true" aria-controls="picklist-options" />
-      <ul id="picklist-options" ref={listRef} role="listbox">
+        aria-label={placeholder} role="combobox" aria-expanded="true" aria-controls={listId}
+        aria-activedescendant={shown[hi] ? `${listId}-${hi}` : undefined} />
+      <ul id={listId} ref={listRef} role="listbox">
         {shown.map((o, i) => (
-          <li key={o.value} data-i={i} role="option" aria-selected={i === hi} className={`${i === hi ? "hi" : ""} ${selected.includes(o.value) ? "on" : ""}`}
+          <li key={o.value} id={`${listId}-${i}`} data-i={i} role="option" aria-selected={i === hi} className={`${i === hi ? "hi" : ""} ${selected.includes(o.value) ? "on" : ""}`}
             onMouseEnter={() => setHi(i)} onMouseDown={e => { e.preventDefault(); onPick(o.value); }}>
             <span className="pl-label">{selected.includes(o.value) && <span className="tick">✓</span>}{o.label}</span>
             {o.hint && <span className="pl-hint">{o.hint}</span>}

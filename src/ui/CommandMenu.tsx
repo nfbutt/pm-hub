@@ -87,6 +87,7 @@ export function CommandMenu({ project, mapping, editor, selected, onSelect, view
     actions.push({ id: "redo", label: "Redo", hint: "Ctrl Shift Z", run: () => { redo(); onClose(); } });
   }
   for (const v of views) actions.push({ id: `go-${v.id}`, label: `Go to ${v.label}`, run: () => { go(v.id); onClose(); } });
+  actions.push({ id: "go-review", label: "Go to Review changes", hint: "before they are applied", run: () => { go("review"); onClose(); } });
   actions.push({ id: "ghonly", label: "Toggle “GitHub only”", run: () => { toggleGithubOnly(); onClose(); } });
 
   // A sentence, if it is one. A sentence that works sits at the top of the list, whatever

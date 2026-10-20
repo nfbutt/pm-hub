@@ -53,13 +53,16 @@ export function Workload({ project, mapping, draft }: { project: Project; mappin
           <div className="section-h"><h2>Needs attention</h2></div>
           <div className="seg wrap" role="tablist" aria-label="Lists">
             {LISTS.map(([k, label]) => (
-              <button key={k} role="tab" aria-selected={k === list} className={k === list ? "on" : ""} onClick={() => setList(k)}>
+              <button key={k} role="tab" id={`wl-tab-${k}`} aria-controls="wl-list" aria-selected={k === list}
+                className={k === list ? "on" : ""} onClick={() => setList(k)}>
                 {label} <span className="num">{hyg[k].length}</span>
               </button>
             ))}
           </div>
-          <p className="muted" style={{ fontSize: 12, margin: "8px 0" }}>{current[2]}</p>
-          <ItemList items={hyg[list]} onOpen={setOpen} />
+          <div id="wl-list" role="tabpanel" aria-labelledby={`wl-tab-${list}`}>
+            <p className="muted" style={{ fontSize: 12, margin: "8px 0" }}>{current[2]}</p>
+            <ItemList items={hyg[list]} onOpen={setOpen} />
+          </div>
         </section>
       </div>
 

@@ -192,6 +192,23 @@ export function checkStep(op: Op, now: Item | undefined): { status: "ready" | "c
   }
 }
 
+/**
+ * Checks the steps again against what GitHub has now, so a change made between the
+ * check and the apply is not overwritten. The steps that no longer match are turned into
+ * conflicts and left out.
+ */
+export function recheck(steps: Step[], current: Map<string, Item>): { steps: Step[]; changed: number } {
+  let changed = 0;
+  const out = steps.map(s => {
+    if (s.status !== "ready" && s.status !== "failed") return s;
+    const c = checkStep(s.op, "key" in s.op ? current.get(s.op.key) : undefined);
+    if (c.status !== "conflict") return s;
+    changed++;
+    return { ...s, status: "conflict" as const, message: c.theirs, include: false };
+  });
+  return { steps: out, changed };
+}
+
 /** Keys whose current GitHub state (and ids) the apply needs. */
 export function involvedKeys(ops: Op[]): string[] {
   const keys = new Set<string>();

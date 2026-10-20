@@ -55,7 +55,7 @@ export function Progress({ project, mapping, draft }: { project: Project; mappin
                   </td>
                   <td><span className={HEALTH_PILL[r.health]}>{HEALTH_LABEL[r.health]}</span></td>
                   <td>
-                    <div className="vs" aria-label={`${r.pctDone}% done, ${r.pctTime ?? 0}% of time passed`}>
+                    <div className="vs" role="img" aria-label={`${r.pctDone}% done, ${r.pctTime ?? 0}% of time passed`}>
                       <span className="vs-done" style={{ width: `${r.pctDone}%` }} />
                       {r.pctTime !== null && <span className="vs-time" style={{ left: `${r.pctTime}%` }} title={`${r.pctTime}% of time passed`} />}
                     </div>

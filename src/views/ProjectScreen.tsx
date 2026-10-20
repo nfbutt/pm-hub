@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
-import { emptyDraft } from "../model/schedule";
-import { shiftDates } from "../model/edits";
+import { useEffect, useMemo, useState } from "react";
+import { buildSchedule, emptyDraft } from "../model/schedule";
+import { setDatesWithDependents, shiftDates } from "../model/edits";
+import { addDays } from "../model/mapping";
 import { CommandMenu } from "../ui/CommandMenu";
 import { Plan } from "./Plan";
 import { Review } from "./Review";
@@ -92,13 +93,23 @@ export function ProjectScreen({ source, view, onSignOut }: { source: Source; vie
       if ((e.key === "[" || e.key === "]") && selected.size && editor && cs.applied) {
         e.preventDefault();
         const days = e.key === "]" ? 7 : -7;
-        editor.record(`Shifted ${selected.size} item${selected.size > 1 ? "s" : ""} ${days > 0 ? "a week later" : "a week earlier"}`, shiftDates(cs.applied.project, mapping!, [...selected], days));
+        // The same move a drag makes, dependents included: the shift mode says what
+        // happens to the work that waits for this.
+        const ops = [...selected].flatMap(k => {
+          if (!cs.applied || !mapping) return [];
+          const from = schedule?.bars.get(k);
+          if (!from) return shiftDates(cs.applied.project, mapping, [k], days);
+          return setDatesWithDependents(cs.applied.project, mapping, k, addDays(from.start, days), addDays(from.end, days), prefs.shiftMode);
+        });
+        editor.record(`Shifted ${selected.size} item${selected.size > 1 ? "s" : ""} ${days > 0 ? "a week later" : "a week earlier"}`, ops);
       }
     };
     addEventListener("keydown", onKey);
     return () => removeEventListener("keydown", onKey);
   }, [cs, githubOnly, menuOpen, selected, editor, mapping]);
   const [prefs, setPrefsState] = useState<Prefs>(readPrefs);
+  // The dates as they stand, draft included: the keyboard shift moves from these.
+  const schedule = useMemo(() => (shown && mapping ? buildSchedule(shown, mapping, draft) : null), [shown, mapping, draft]);
   const setPrefs = (p: Prefs) => { setPrefsState(p); writePrefs(p); };
 
   const routeFor = (v: ViewId): Route =>

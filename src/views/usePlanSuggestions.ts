@@ -114,7 +114,9 @@ export function usePlanSuggestions(project: Project, mapping: Mapping, plan: Pla
       // group things itself means the same project comes out grouped differently every
       // time, and a roadmap that churns is worse than no roadmap.
       const releaseAnswer = cachedReleases ?? await chatJson(settings, SYSTEM_RELEASES, releasePrompt, checkReleaseAnswer);
-      const checkedReleases = releaseAnswer ? checkReleases(project, mapping, groupByTheme(releaseAnswer.themes)) : { accepted: [], dropped: [] };
+      // An answer cached before the shape changed is not an answer any more.
+      const themes = releaseAnswer && Array.isArray(releaseAnswer.themes) ? releaseAnswer.themes : null;
+      const checkedReleases = themes ? checkReleases(project, mapping, groupByTheme(themes)) : { accepted: [], dropped: [] };
       if (releaseAnswer && !cachedReleases) { got++; void writeChat(releasePrompt, releaseAnswer); }
 
       if (dead) return;

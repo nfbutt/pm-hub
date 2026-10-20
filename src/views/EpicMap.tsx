@@ -177,7 +177,8 @@ export function EpicMap({ project, mapping, draft, editor, local, history, revie
 
       <div className="emap-body">
         <div className="card emap-canvas-wrap">
-          <div ref={box} className="emap-canvas" role="img" aria-label="Map of epics and their tasks" />
+          <div ref={box} className="emap-canvas" role="img"
+            aria-label="Map of epics and their tasks. Everything it shows is also in the panel beside it, which reads as text." />
           {failed && <p className="callout bad emap-float">The map couldn't load. Reload the page to try again.</p>}
           {!editor && <span className="pill emap-float">Read-only: turn off “GitHub only” to move tasks</span>}
           {hover && (

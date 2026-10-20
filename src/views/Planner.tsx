@@ -126,7 +126,7 @@ export function Planner({ project, mapping, editor, local }: {
               </ul>
               <div className="drow">
                 <button className="btn primary" onClick={addToPlan} disabled={!editor || !chosen || !chosen.epics.length}>Add to the plan</button>
-                <button className="btn" onClick={() => exportCsv(chosen)} disabled={!chosen}>Export as CSV</button>
+                <button className="btn" onClick={() => { if (exportCsv(chosen)) setMsg("The plan was copied as CSV."); }} disabled={!chosen}>Export as CSV</button>
                 <button className="btn ghost" onClick={() => { setDraft(null); setProblems([]); setKept(new Set()); }}>Discard the draft</button>
               </div>
               {!editor && <span className="muted" style={{ fontSize: 12 }}>Turn off “GitHub only” to add the plan to your draft.</span>}
@@ -139,8 +139,8 @@ export function Planner({ project, mapping, editor, local }: {
 }
 
 /** The draft as CSV, for pasting somewhere else. */
-function exportCsv(draft: PlanDraft | null) {
-  if (!draft) return;
+function exportCsv(draft: PlanDraft | null): boolean {
+  if (!draft) return false;
   const rows = [["Epic", "Story", "Days", "Start", "End", "Release", "After", "Why"]];
   for (const e of draft.epics) {
     for (const s of e.stories) rows.push([e.title, s.title, String(s.days), e.start ?? "", e.end ?? "", e.release ?? "", e.after.join("; "), s.why || e.why]);
@@ -148,4 +148,5 @@ function exportCsv(draft: PlanDraft | null) {
   }
   const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
   void navigator.clipboard?.writeText(csv);
+  return true;
 }
