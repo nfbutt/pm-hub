@@ -70,8 +70,7 @@
 .emap-timelapse-row .muted { flex: 1; min-width: 0; }
 
 /* meeting mode: the map stays visible behind the panel */
-.meeting { position: fixed; inset: 0; z-index: 55; background: rgba(10, 18, 28, .28); display: grid; justify-items: end; }
-.meeting-panel {
+.meeting { position: fixed; inset: 0; z-index: 55; background: rgba(10, 18, 28, .28); display: grid; justify-items: end; }.meeting-panel {
   width: min(420px, 100%); height: 100%; overflow: auto; background: var(--bg); border-left: 1px solid var(--line);
   padding: 18px 18px calc(24px + env(safe-area-inset-bottom, 0px)); display: grid; gap: 12px; align-content: start;
   box-shadow: var(--shadow);
@@ -83,3 +82,41 @@
 .meeting-tally { font-size: 13px; }
 .meeting-summary { display: grid; gap: 10px; justify-items: start; }
 .meeting-summary .emap-list li { justify-content: space-between; }
+
+/* roadmap: every epic on one timeline, with the links between them */
+.road-board { overflow: hidden; }
+.road-scroll { overflow: auto; max-height: min(78vh, 900px); }
+.road-grid { position: relative; }
+.road-head { position: sticky; top: 0; z-index: 3; background: var(--surface); display: flex; border-bottom: 1px solid var(--line); }
+.road-head .rl { flex: none; padding: 6px 12px; border-right: 1px solid var(--line); }
+.road-head .rt { position: relative; flex: none; }
+.road-head .hrow { position: relative; height: 18px; }
+.road-head .hseg { position: absolute; top: 0; font-size: 11px; color: var(--muted); padding-left: 4px; white-space: nowrap; }
+.road-head .hseg.strong { font-weight: 700; color: var(--fg); }
+.road-head .rmark { position: absolute; top: 0; font-size: 10px; font-weight: 700; color: var(--accent); white-space: nowrap; }
+.road-head .rmark::before { content: "◆ "; }
+.road-row { display: flex; border-bottom: 1px solid var(--line-soft); align-items: center; }
+.road-row .rl { flex: none; display: flex; gap: 6px; align-items: baseline; padding: 0 12px; overflow: hidden; }
+.road-row .rname { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.road-row .rrel { font-size: 11px; white-space: nowrap; }
+.road-row.critical .rname { color: var(--bad); }
+.road-row.focus { background: var(--accent-soft); }
+.road-row .rt { position: relative; flex: none; height: 100%; }
+.road-arrows { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 2; overflow: visible; }
+.road-link { fill: none; stroke: var(--muted); stroke-width: 1.4; opacity: .65; color: var(--muted); }
+.road-link.critical { stroke: var(--bad); color: var(--bad); stroke-width: 2; opacity: .95; }
+.road-link.early { stroke-dasharray: 4 3; }
+.road-bar, .rbar { position: absolute; top: 8px; height: 16px; border-radius: 5px; background: var(--accent-soft); border: 1px solid var(--accent); overflow: hidden; }
+.road-row.critical .rbar { border-color: var(--bad); background: color-mix(in srgb, var(--bad) 12%, var(--surface)); }
+.rbar .fill { display: block; height: 100%; background: color-mix(in srgb, var(--accent) 35%, transparent); }
+.rslack { position: absolute; top: 8px; font-size: 10px; font-weight: 700; font-family: var(--f-mono); white-space: nowrap; }
+.rslack.critical { color: var(--bad); }
+.rslack.near { color: var(--warn); }
+
+/* the plan check panel */
+.plan-problems li { align-items: baseline; }
+.plan-problems .emap-link { font-weight: 500; }
+.plan-sugg { border-top: 1px solid var(--line-soft); padding: 8px 0; display: grid; gap: 4px; }
+.plan-sugg:first-of-type { border-top: 0; }
+.plan-sugg-title { font-size: 13px; }
+.plan-quote { font-size: 12px; font-style: italic; border-left: 2px solid var(--line); padding-left: 8px; }

@@ -181,5 +181,23 @@ export function promoteToEpic(m: Mapping, item: Item): Op[] {
   return [];
 }
 
+/**
+ * Puts an item in a release, using the project's own release rule: a single-select field,
+ * a repository milestone or an iteration. Only releases that already exist can be set.
+ */
+export function setRelease(p: Project, m: Mapping, item: Item, releaseTitle: string): Op[] {
+  if (m.release.kind === "field") {
+    const field = m.release.field;
+    const f = p.fields.find(x => x.name === field);
+    const opt = f?.kind === "single" ? f.options.find(o => o.name === releaseTitle) : undefined;
+    return opt ? setOption(p, item, field, releaseTitle) : [];
+  }
+  if (m.release.kind === "milestone") {
+    const ms = milestoneOptions(p).find(x => x.title === releaseTitle);
+    return ms ? setMilestone(item, ms) : [];
+  }
+  return [];
+}
+
 /** Epics, for "move to epic" pickers. */
 export const epicOptions = (p: Project, m: Mapping) => p.items.filter(i => isEpic(i, m) && i.state === "open").sort((a, b) => a.title.localeCompare(b.title));

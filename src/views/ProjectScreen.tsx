@@ -16,6 +16,7 @@ import { BurnUp } from "./BurnUp";
 import { Confidence } from "./Confidence";
 import { Dependencies } from "./Dependencies";
 import { EpicMap } from "./EpicMap";
+import { Roadmap } from "./Roadmap";
 import { Overview } from "./Overview";
 import { Progress } from "./Progress";
 import { Schedule } from "./Schedule";
@@ -42,6 +43,7 @@ const TABS: { id: ViewId; label: string }[] = [
   { id: "confidence", label: "Release confidence" },
   { id: "dependencies", label: "Dependencies" },
   { id: "epics", label: "Epic Map" },
+  { id: "roadmap", label: "Roadmap" },
   { id: "changes", label: "What changed" },
   { id: "settings", label: "Settings" },
 ];
@@ -162,6 +164,8 @@ export function ProjectScreen({ source, view, onSignOut }: { source: Source; vie
             {active === "dependencies" && <Dependencies project={shown} mapping={mapping} draft={draft} />}
             {active === "epics" && <EpicMap project={shown} mapping={mapping} draft={draft} editor={editor} local={prefs.local}
               history={history} reviewHref={hrefFor(routeFor("review"))} />}
+            {active === "roadmap" && <Roadmap project={shown} mapping={mapping} draft={draft} editor={editor} local={prefs.local}
+              zoom={prefs.zoom} today={new Date().toISOString().slice(0, 10)} />}
             {active === "changes" && project && (
               <Changes base={project} edited={shown} mapping={mapping} history={history} compareId={compare?.id ?? null}
                 onCompare={(id, b) => { compareTo(id, b); if (id) location.hash = hrefFor(routeFor("gantt")); }} settingsHref={hrefFor(routeFor("settings"))} />

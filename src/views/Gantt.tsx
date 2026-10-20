@@ -4,6 +4,7 @@ import { addDays, priorityOf, type Mapping } from "../model/mapping";
 import type { Item, Project } from "../model/normalize";
 import { rowsToCsv, rowsToMarkdown } from "../model/export";
 import { buildSchedule, daysBetween, findConflicts, ganttRows, releaseColumns, timeWindow, type Draft, type Row } from "../model/schedule";
+import { buildPlan } from "../model/plan/cpm";
 import { datesOp } from "../model/ops";
 import { addBlocker, moveToParent, newItem, setDatesWithDependents, setTitle } from "../model/edits";
 import type { Prefs } from "../store/cache";
@@ -53,6 +54,8 @@ export function Gantt({ project, mapping, draft, editor, changed, onDiscardAll, 
   const schedule = useMemo(() => buildSchedule(project, mapping, effDraft), [project, mapping, effDraft]);
   const original = useMemo(() => buildSchedule(editor?.base ?? project, mapping), [editor?.base, project, mapping]);
   const conflicts = useMemo(() => findConflicts(schedule, effDraft), [schedule, effDraft]);
+  // What is broken about the plan as written, at epic level. The Roadmap says it in full.
+  const planBreaks = useMemo(() => buildPlan(project, mapping, schedule).problems.filter(p => p.severity === 3), [project, mapping, schedule]);
   const scope = useMemo(() => scopeAddedAfterStart(editor?.base ?? project, mapping, original), [editor?.base, project, mapping, original]);
   const then = useMemo(() => new Map((compare?.baseline.items ?? []).map(i => [i.key, i])), [compare]);
   const groups = useMemo(() => ganttRows(project, mapping, schedule, effDraft, { includeClosed: prefs.includeClosed, expanded }, original),
@@ -199,6 +202,13 @@ export function Gantt({ project, mapping, draft, editor, changed, onDiscardAll, 
           <span>Discard every change in this scenario and go back to what GitHub has?</span>
           <button className="btn" onClick={() => { onDiscardAll?.(); setConfirmReset(false); }}>Discard changes</button>
           <button className="btn" onClick={() => setConfirmReset(false)}>Keep it</button>
+        </div>
+      )}
+
+      {planBreaks.length > 0 && (
+        <div className="callout bad">
+          <b>{planBreaks.length} thing{planBreaks.length === 1 ? "" : "s"} break this plan</b>: {planBreaks.slice(0, 2).map(p => p.message).join(" ")}{planBreaks.length > 2 ? `, and ${planBreaks.length - 2} more` : ""}.{" "}
+          <a href="#roadmap" onClick={e => { e.preventDefault(); location.hash = location.hash.replace(/\/[a-z]+$/, "/roadmap"); }}>See the roadmap</a>
         </div>
       )}
 

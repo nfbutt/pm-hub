@@ -76,7 +76,7 @@ export async function embed(settings: LocalSettings, texts: string[]): Promise<n
  * One chat answer, asked for as JSON. The answer is checked by `check`; anything that
  * does not pass is dropped, because a model that made something up is worse than no model.
  */
-export async function chatJson(settings: LocalSettings, system: string, user: string, check: (v: unknown) => boolean): Promise<unknown | null> {
+export async function chatJson<T>(settings: LocalSettings, system: string, user: string, check: (v: unknown) => v is T): Promise<T | null> {
   const data = await post(settings, "/chat/completions", {
     model: settings.chatModel, temperature: 0,
     messages: [{ role: "system", content: system }, { role: "user", content: user }],
@@ -164,4 +164,73 @@ export function promptGapIdeas(epicTitles: string[], histogram: [string, number]
     `Work that belongs to no epic: ${loose.slice(0, 25).join("; ")}`,
     "Suggest up to three new epics that would give that work a home. Answer with {\"ideas\": [{\"title\": \"...\", \"why\": \"...\", \"taskKeys\": []}]}.",
   ].join("\n");
+}
+
+// ---------------------------------------------------------------- dependencies
+
+export interface ProposedLink { from: string; to: string; evidence: string }
+export interface ProposedRelease { release: string; epics: string[]; why: string }
+
+export const SYSTEM_DEPENDENCIES = [
+  "You find dependencies between work items. You only use the item keys you are given.",
+  "You quote the words that show the dependency, copied exactly from one of the two items.",
+  "You answer with JSON only, and you leave out anything you cannot quote.",
+].join(" ");
+
+/**
+ * Asks which of the candidate pairs really block each other. The pairs come from the
+ * plan itself, so the model is judging what is in front of it rather than inventing work.
+ */
+export function promptDependencies(pairs: { a: string; b: string; aTitle: string; bTitle: string; shared: string[] }[]): string {
+  const lines = pairs.map(p =>
+    `${p.a} | ${p.b}\n  A: ${p.aTitle}\n  B: ${p.bTitle}${p.shared.length ? `\n  They share: ${p.shared.join(", ")}` : ""}`);
+  return [
+    "Which of these pairs is a real dependency: one item cannot start until the other is done?",
+    "Look for wording about needing, waiting for, after, once, depends on, blocked by, or a feature that needs another.",
+    "",
+    ...lines,
+    "",
+    "Answer with {\"links\": [{\"from\": \"<key>\", \"to\": \"<key>\", \"evidence\": \"<words copied from one of the two items>\"}]}.",
+    "For each link, \"from\" is the item that blocks, and \"to\" is the item that waits.",
+    "Use no more than eight links, and only ones you can quote.",
+  ].join("\n");
+}
+
+/** Keeps only answers that name real keys and carry a reason. */
+export function checkLinks(v: unknown): v is { links: ProposedLink[] } {
+  if (typeof v !== "object" || v === null) return false;
+  const links = (v as { links?: unknown }).links;
+  if (!Array.isArray(links) || links.length > 12) return false;
+  return links.every(l => typeof l === "object" && l !== null
+    && typeof (l as ProposedLink).from === "string" && typeof (l as ProposedLink).to === "string"
+    && typeof (l as ProposedLink).evidence === "string");
+}
+
+export const SYSTEM_RELEASES = [
+  "You group work into releases. You only use the release names and item keys you are given.",
+  "You answer with JSON only.",
+].join(" ");
+
+/** Asks which epics should ship together. */
+export function promptReleases(epics: { key: string; title: string; release: string | null }[], releases: string[]): string {
+  return [
+    `The releases in this project are: ${releases.join(", ") || "(none yet)"}`,
+    "The epics:",
+    ...epics.map(e => `  ${e.key} | ${e.title}${e.release ? ` | currently in ${e.release}` : " | in no release"}`),
+    "Which epics clearly belong in the same release? Only suggest a release that exists, and only when the work really goes together.",
+    "Answer with {\"releases\": [{\"release\": \"<name>\", \"epics\": [\"<key>\"], \"why\": \"<one sentence>\"}]}.",
+    "Give at most three groups.",
+  ].join("\n");
+}
+
+/** Keeps only answers that name a release and a list of keys. */
+export function checkReleases(v: unknown): v is { releases: ProposedRelease[] } {
+  if (typeof v !== "object" || v === null) return false;
+  const releases = (v as { releases?: unknown }).releases;
+  if (!Array.isArray(releases) || releases.length > 5) return false;
+  return releases.every(r => typeof r === "object" && r !== null
+    && typeof (r as ProposedRelease).release === "string"
+    && Array.isArray((r as ProposedRelease).epics)
+    && (r as ProposedRelease).epics.every(k => typeof k === "string")
+    && typeof (r as ProposedRelease).why === "string");
 }

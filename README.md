@@ -23,6 +23,7 @@ Pick one of your GitHub Projects. pm-hub reads its items, field values, mileston
 | Release confidence | Monte Carlo forecast: chance of hitting each due date, plus the dates half and 85% of runs finish by |
 | Dependencies | Graph of blocked-by and parent links, critical path, cycles |
 | Epic Map | Epics as bubbles of tasks: overlaps, misplaced tasks, kinds of work with no epic, a structure score; drag tasks between epics; a deck of suggestions you can accept or turn down; meeting mode, a timelapse of the plan and goals to work towards |
+| Roadmap | Every epic on one timeline with the dependencies drawn between them: the chain that decides when the plan ends, how much slack each epic has, and what is broken about the plan as it stands |
 | Settings | Change how dates, epics, swimlanes, releases and priority are read; fiscal-year quarters |
 | Review | Every pending change with before and after, checked against GitHub, then applied |
 
@@ -73,10 +74,11 @@ Epics and stories change all the time: they get re-dated, re-scoped, split, move
 
 ### A model on your own computer (optional)
 
-The Epic Map can ask a model running on **your** machine to compare work by meaning, name what an epic is really about, explain an overlap, and suggest epics that are missing. It is off until you turn it on in *Settings → Local model*.
+The Epic Map and the Roadmap can ask a model running on **your** machine to compare work by meaning, name what an epic is really about, explain an overlap, suggest epics that are missing, and say which items really block each other. It is off until you turn it on in *Settings → Local model*.
 
 - **Nothing leaves your computer.** The address has to be `localhost` or `127.0.0.1`; anything else is refused before a request is made.
 - **Only issue text goes to the model**: titles and bodies, plus the epic titles and the words two epics share. **Your GitHub token is never part of a request**, and no project metadata, file or repository is sent.
+- **Nothing is applied by the model.** It proposes; pm-hub checks every proposal against the plan — real items, no loops, and a reason that really appears in the issue — and you decide with one click. A proposal that fails a check is dropped, and the card says how many.
 - Embeddings and answers are cached in your browser's IndexedDB, so the model is asked once per item, not once per visit.
 - If the model is slow, unreachable or answers something that does not make sense, pm-hub quietly falls back to its own analysis.
 - The built page's Content-Security-Policy allows `http://localhost:*` and `http://127.0.0.1:*` in `connect-src`, and nothing else.
@@ -88,6 +90,13 @@ OLLAMA_ORIGINS=https://nfbutt.github.io ollama serve
 ```
 
 Then run `ollama pull qwen3` and `ollama pull qwen3-embedding`, and set the address to `http://localhost:11434/v1` in *Settings → Local model*. LM Studio and llama.cpp's server work the same way.
+
+### How the plan is checked
+
+The Roadmap and the Epic Map both answer one question: **can this plan work as it stands?** The answer comes from the plan itself, not from a model: the dependencies between the epics (a link between two stories is a link between the epics that hold them), a forward and a backward pass, and how much slack each epic has. The chain with no slack is the one that decides when the plan ends.
+
+That finds four kinds of broken plan: a loop of epics that block each other, an epic that starts before the work blocking it is finished, work that finishes after the release it belongs to is due, and epics with no dates or no release. Each one comes with a way to fix it.
+
 
 
 ## Develop
@@ -119,7 +128,8 @@ Tests, screenshots and the demo use synthetic data only. Never commit real proje
 src/github/   GraphQL client, queries, loader, mutations and the apply engine
 src/model/    pure logic: normalize, mapping, schedule, health, forecast, deps,
               ops (the change list), edits (intentions to ops), scenarios,
-              diff (baselines, churn)
+              diff (baselines, churn), plan (the CPM engine and its checks),
+              epicmap (the map, its suggestions and its clusters)
 src/store/    browser cache, preferences, plan history (local or in a repo)
 src/views/    one component per view
 src/ui/       design tokens, shell, drawer, SVG charts
