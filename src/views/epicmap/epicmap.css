@@ -120,3 +120,8 @@
 .plan-sugg:first-of-type { border-top: 0; }
 .plan-sugg-title { font-size: 13px; }
 .plan-quote { font-size: 12px; font-style: italic; border-left: 2px solid var(--line); padding-left: 8px; }
+
+/* the planner */
+.planner { display: grid; gap: 12px; max-width: 900px; }
+.planner .emap-list li { align-items: baseline; }
+.planner .emap-list ul.emap-list { margin: 2px 0 0 18px; }

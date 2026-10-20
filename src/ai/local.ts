@@ -10,10 +10,21 @@ export interface LocalSettings {
   base: string;
   chatModel: string;
   embedModel: string;
+  /**
+   * The speech server, which is usually a different program: the chat model does not
+   * transcribe. Speaches and friends speak the OpenAI transcription API.
+   */
+  voiceBase?: string;
+  voiceModel?: string;
 }
+
+/** Where the speech server usually lives. */
+export const DEFAULT_VOICE_BASE = "http://localhost:8000/v1";
+export const DEFAULT_VOICE_MODEL = "whisper-1";
 
 export const defaultLocal: LocalSettings = {
   enabled: false, base: "http://localhost:11434/v1", chatModel: "qwen3", embedModel: "qwen3-embedding",
+  voiceBase: DEFAULT_VOICE_BASE, voiceModel: DEFAULT_VOICE_MODEL,
 };
 
 /** How long to wait for the model before giving up and using pm-hub's own analysis. */

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-export const VIEWS = ["overview", "gantt", "plan", "releases", "schedule", "progress", "burnup", "confidence", "dependencies", "epics", "roadmap", "workload", "changes", "settings", "review"] as const;
+export const VIEWS = ["overview", "gantt", "plan", "releases", "schedule", "progress", "burnup", "confidence", "dependencies", "epics", "roadmap", "planner", "workload", "changes", "settings", "review"] as const;
 export type ViewId = (typeof VIEWS)[number];
 
 export type Route =

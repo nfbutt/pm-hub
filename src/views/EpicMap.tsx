@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { defaultLocal, type LocalSettings } from "../ai/local";
 import { analyze, scoreIfMoved, type EpicMapModel } from "../model/epicmap";
 import { categoryName } from "../model/epicmap/categories";
 import { LENSES, lensColours, lensValue, type Lens } from "../model/epicmap/lens";
@@ -22,15 +23,9 @@ import { PlanProblems } from "./plan/PlanProblems";
 import { useLocalChat, useLocalVectors } from "./useLocalModel";
 import "./epicmap/epicmap.css";
 
-/** The model on this computer, if the user turned one on. */
-export interface EpicMapLocal { enabled: boolean; base: string; chatModel: string; embedModel: string }
-
-/** No model: the same object every time, so the effects do not run again and again. */
-const NO_MODEL: EpicMapLocal = { enabled: false, base: "", chatModel: "", embedModel: "" };
-
 export function EpicMap({ project, mapping, draft, editor, local, history, reviewHref }: {
   project: Project; mapping: Mapping; draft: Draft; editor?: Editor;
-  local?: EpicMapLocal;
+  local?: LocalSettings;
   /** The plan history, for the timelapse and the quests. */
   history?: HistoryState;
   /** Where the Review tab is, for the end of a meeting. */
@@ -44,7 +39,7 @@ export function EpicMap({ project, mapping, draft, editor, local, history, revie
   const [lens, setLens] = useState<Lens>("category");
   const [meeting, setMeeting] = useState(false);
   const [tally, setTally] = useState<MeetingTally>({ moves: 0, merges: 0, epics: 0, score: 0 });
-  const settings = local ?? NO_MODEL;
+  const settings = local ?? defaultLocal;
   // With a model on this computer, the map compares work by meaning.
   const vectors = useLocalVectors(project, settings);
   const model = useMemo(() => analyze(project, mapping, { openOnly, vectors: vectors.vectors }), [project, mapping, openOnly, vectors.vectors]);

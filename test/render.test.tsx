@@ -22,6 +22,7 @@ import { EpicMap } from "../src/views/EpicMap";
 import { MeetingMode } from "../src/views/epicmap/MeetingMode";
 import { Roadmap } from "../src/views/Roadmap";
 import { Review } from "../src/views/Review";
+import { Planner } from "../src/views/Planner";
 import { BurnUp } from "../src/views/BurnUp";
 import { Confidence } from "../src/views/Confidence";
 import { Progress } from "../src/views/Progress";
@@ -67,8 +68,15 @@ describe("views render with the demo project", () => {
     expect(html).toContain("road-row");
   });
 
-  it("Review groups a bulk change into one row", () => {
-    const groups = [{
+  it("Planner asks what you are building and says what to do next", () => {
+    const html = renderToString(<Planner project={project} mapping={mapping} />);
+    expect(html).toContain("Planner");
+    expect(html).toContain("What are you building?");
+    expect(html).toContain("Write a plan");
+    expect(html).toContain("Turn on a local model");
+  });
+
+  it("Review groups a bulk change into one row", () => {    const groups = [{
       id: "c1", label: "Accepted: Merge two epics",
       ops: [
         { kind: "setParent" as const, key: "o/r#1", before: "o/r#2", after: "o/r#3" },
