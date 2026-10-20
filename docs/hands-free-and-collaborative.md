@@ -99,6 +99,14 @@ Done: focus management in the drawer and the modal (focus in, trapped, restored)
 
 Still to do: a text equivalent of the Gantt and the Epic Map for screen readers (the Plan table and the Epic Map's panel are the nearest), and the Epic Map's live region, which mounts with its text already in it and so may not be announced.
 
+### Also built: comparing two epics
+
+`/compare` puts two epics side by side: what each covers, what they have in common, and what only one of them has. A model on this computer can read both and say so, but every claim has to quote the words it came from, and a claim whose words are not really in the stories is dropped.
+
+Dragging a story from one side to the other proposes a move. The moves are ticked, and **Apply to GitHub** asks first: it stages them in the draft and takes you to the review screen, where every change and the exact calls are shown before anything is written. The Gantt's export offers the same way through.
+
+The rule behind it is the one the research settled on: **AI proposes, a named human disposes, the diff is visible, and nothing is written without a click.**
+
 ## What not to do
 
 - **Do not build co-editing.** Every structured plan tool is last-writer-wins, and the evidence says the payoff is a legible record and a shared mental model, not a merge algorithm.
