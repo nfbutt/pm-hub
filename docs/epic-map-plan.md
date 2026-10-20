@@ -118,7 +118,15 @@ Each phase below is small enough to be one PR, and each was one. The order was b
 
 **Why.** Three things at once: usable without hands, easy enough to be obvious, and workable with other people. The analysis is in `docs/hands-free-and-collaborative.md`; the research behind it is in `research_notes/Hands free and collaborative/`.
 
-**Phase 15 — one command surface.** A single bar that takes speech, keys or typing, and turns "move the API epic two weeks later" into ordinary operations. The routing is deterministic first: a pure `findTargets` (type-aware, number-aware, fuzzy), a grammar for the actions that exist, and a slot-filling model call only for what the grammar cannot parse — because the dominant failure of a model-routed command is a missing or wrong argument, so the parser never invents one. The new intentions the app lacks today: a named-epic merge, archive, and a relative-date expression.
+**Phase 15 — one command surface — done.** A single bar that takes speech, keys or typing, and turns "move the API epic two weeks later" into ordinary operations.
+
+What was built:
+- `src/model/command/targets.ts`: `findTargets` — type-aware ("the API *epic*"), number-aware ("#123"), release-aware ("in the March release"), and scored on the words for the rest.
+- `src/model/command/intent.ts`: a grammar for the actions that exist, tried **before** any model, because a model-routed command tops out near 0.73 and its mistakes are missing and wrong arguments. A missing slot becomes a question, never a guess.
+- `src/model/command/ops.ts`: an intention becomes the same operations a mouse click makes. It adds the two the app was missing: a named-epic merge and archiving.
+- The command menu takes the sentence as a pinned entry with a preview of what it will do, asks which item when it is not sure, and has a microphone that dictates into the same box.
+
+Still to do in this phase: a model filling in what the grammar cannot parse, and the relative-date expressions ("to the 15th", "before the release").
 
 **Phase 16 — the voice loop.** Push to talk, the app answering out loud, barge-in, directive prompts instead of yes/no questions, the transcript always visible and editable, confirmation only for what cannot be undone, and every spoken answer paired with something visible.
 
