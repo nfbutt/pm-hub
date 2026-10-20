@@ -1,28 +1,31 @@
 # The Epic Map and the plan: what is next
 
-Where the Epic Map stands after phases 5–9, and what to build next.
+Where the Epic Map stands, and what is left to build. Every phase below is done except the ones in "Later".
 
-The research behind the last phase is in `reports/AI assisted roadmap planning.md` (87 sourced links; the raw notes are not in the repo).
+The research behind the last phases is in `reports/AI assisted roadmap planning.md` (87 sourced links; the raw notes are not in the repo).
 
-**There is a second analysis** in `docs/ai-planning-and-voice.md`: what to do about the Gantt, an AI that drafts a whole plan, voice, and rolling changes back. It covers the same ground from the research side and says which order to build in — the short version is that **rollback comes before the AI planner**, because a plan that creates forty issues needs somewhere to go back to.
+**There is a second analysis** in `docs/ai-planning-and-voice.md`: what to do about the Gantt, an AI that drafts a whole plan, voice, and rolling changes back. It covers the same ground from the research side and says which order to build in — the short version is that **rollback comes before the AI planner**, because a plan that creates forty issues needs somewhere to go back to. That is the order they were built in.
 
 ## Where this is now
 
-The Epic Map is three views that answer three questions about a plan:
+The Epic Map is four views that answer four questions about a plan:
 
 | View | Question |
 |---|---|
 | **Epic Map** (`/epics`) | Is the plan *organised* well? Which tasks sit in the wrong epic, which epics overlap, which kinds of work have no epic, and what would change if you moved things? |
 | **Roadmap** (`/roadmap`) | Will the plan *execute*? Every epic on one timeline with the dependencies between them, the chain that decides when the plan ends, how much slack each epic has, and what is broken about the plan as it stands. |
-| **Gantt** (`/gantt`) | What is the work itself? Bars you can drag, conflicts, baselines, releases. |
+| **Gantt** (`/gantt`) | What is the work itself? Bars you can drag, the dependencies drawn between them, the chain that decides the end date marked, conflicts, baselines, releases. |
+| **Planner** (`/planner`) | What should the plan *be*? Describe it — by typing or by speaking — and a model on this computer drafts the epics, stories, dates, release and dependencies. You read it, tick what you want, and it becomes one change. |
 
-The three share one engine. `src/model/plan/cpm.ts` turns the epics, their dates and the links between them into a forward and a backward pass, total float per epic, the critical chain, and four kinds of broken plan (a loop, an epic that starts before its blocker is finished, work that finishes after its release is due, and epics with no dates or no release). The Epic Map and the Roadmap both show those problems, worded the same way.
+The first three share one engine. `src/model/plan/cpm.ts` turns the epics, their dates and the links between them into a forward and a backward pass, total float per epic, the critical chain, and four kinds of broken plan (a loop, an epic that starts before its blocker is finished, work that finishes after its release is due, and epics with no dates or no release). The Epic Map and the Roadmap both show those problems, worded the same way, and the Gantt draws the chain.
 
-A model on your own machine (opt-in, localhost only, off by default) can read the plan and propose things: which items really block each other, which epics should ship together, what an epic's mix of work really is. Nothing it says is applied by itself, and nothing it says is shown until it passes a deterministic check in `src/model/plan/infer.ts`: real items, still open, not already linked, no loop, and **a reason that is a quote which really appears in one of the two issues**. About one model proposal in five is wrong, so every proposal is a click, and every click is an ordinary recorded change that undo works on.
+A model on your own machine (opt-in, localhost only, off by default) can read the plan and propose things: which items really block each other, which epics should ship together, what an epic's mix of work really is, what the whole plan should be. Nothing it says is applied by itself, and nothing it says is shown until it passes a deterministic check in `src/model/plan/infer.ts`: real items, still open, not already linked, no loop, and **a reason that is a quote which really appears in one of the two issues**. About one model proposal in five is wrong, so every proposal is a click, and every click is an ordinary recorded change that undo works on.
+
+**And any of it can be put back.** An apply keeps the operations and the ids it used, so *What changed* can roll it back days later: checked against GitHub, previewed, applied like anything else, undone with one keystroke.
 
 ## The plan
 
-Each phase below is small enough to be one PR. The order is by value, not by effort.
+Each phase below is small enough to be one PR, and each was one. The order was by value, not by effort.
 
 ### Phase 10: a working calendar — done
 
@@ -111,11 +114,12 @@ Each phase below is small enough to be one PR. The order is by value, not by eff
 
 ### Later, when there is something to write back
 
-- **An AI that drafts a whole plan.** See `docs/ai-planning-and-voice.md`: the flow, the guardrails and what pm-hub's op model is missing. It goes after phase 11, because a plan that creates dozens of issues needs somewhere to roll back to.
-- **Voice.** A local transcription server and a mic that types into the focused field. The browser's own Web Speech API uploads audio to a Google server, so it is out by default.
 - **Link types and lag.** Finish-to-start, start-to-start, finish-to-finish, start-to-finish, and a signed lag. GitHub only has "blocked by", so there is nowhere to write these yet; the plan model would need the field before the interface can.
 - **Resource levelling.** Smoothing first (it never moves the critical path), levelling only as a trade the user opts into. Needs per-person capacity, which pm-hub has hints of but not enough of.
 - **Work outside the project.** The loader fetches only what is in the project, so a dependency on an issue that is not in it can only be reported, never modelled.
+- **A spoken conversation, not just dictation.** The microphone now types into whatever field has the focus, and the planner takes a spoken description. Making the model *answer* out loud, and carrying a conversation across several turns, is the next step -- `speechSynthesis` with a local voice is the easy half.
+- **A draft that can be edited.** The planner's draft can be ticked or unticked, but not renamed or re-dated. Editing the draft is a table of inputs, not a canvas.
+- **The plan's own history.** Baselines keep the shape of the plan but not the labels, the assignees or the links, so a baseline cannot be restored -- only compared with. A snapshot that could be put back would be a different thing.
 
 ## Rules (don't break these)
 
