@@ -15,6 +15,7 @@ import { Gantt } from "./Gantt";
 import { BurnUp } from "./BurnUp";
 import { Confidence } from "./Confidence";
 import { Dependencies } from "./Dependencies";
+import { EpicMap } from "./EpicMap";
 import { Overview } from "./Overview";
 import { Progress } from "./Progress";
 import { Schedule } from "./Schedule";
@@ -40,6 +41,7 @@ const TABS: { id: ViewId; label: string }[] = [
   { id: "burnup", label: "Burn-up" },
   { id: "confidence", label: "Release confidence" },
   { id: "dependencies", label: "Dependencies" },
+  { id: "epics", label: "Epic Map" },
   { id: "changes", label: "What changed" },
   { id: "settings", label: "Settings" },
 ];
@@ -158,6 +160,7 @@ export function ProjectScreen({ source, view, onSignOut }: { source: Source; vie
             {active === "burnup" && <BurnUp project={shown} mapping={mapping} />}
             {active === "confidence" && <Confidence project={shown} mapping={mapping} />}
             {active === "dependencies" && <Dependencies project={shown} mapping={mapping} draft={draft} />}
+            {active === "epics" && <EpicMap project={shown} mapping={mapping} draft={draft} editor={editor} />}
             {active === "changes" && project && (
               <Changes base={project} edited={shown} mapping={mapping} history={history} compareId={compare?.id ?? null}
                 onCompare={(id, b) => { compareTo(id, b); if (id) location.hash = hrefFor(routeFor("gantt")); }} settingsHref={hrefFor(routeFor("settings"))} />

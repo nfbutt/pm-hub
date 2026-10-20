@@ -18,6 +18,7 @@ import { ItemDrawer } from "../src/views/ItemDrawer";
 import { CommandMenu } from "../src/ui/CommandMenu";
 import { buildSchedule } from "../src/model/schedule";
 import { Dependencies, layoutGraph } from "../src/views/Dependencies";
+import { EpicMap } from "../src/views/EpicMap";
 import { BurnUp } from "../src/views/BurnUp";
 import { Confidence } from "../src/views/Confidence";
 import { Progress } from "../src/views/Progress";
@@ -32,6 +33,17 @@ const mapping = detectMapping(project);
 const noop = () => {};
 
 describe("views render with the demo project", () => {
+  it("Epic Map, editable and read-only", () => {
+    const editor: Editor = { base: project, record: noop, discard: noop, titleOf: k => k };
+    const html = renderToString(<EpicMap project={project} mapping={mapping} draft={emptyDraft()} editor={editor} />);
+    expect(html).toContain("Structure score");
+    expect(html).toContain("Work with no epic of its own");
+    expect(html).toContain("Create epic");
+    const ro = renderToString(<EpicMap project={project} mapping={mapping} draft={emptyDraft()} />);
+    expect(ro).toContain("Read-only");
+    expect(ro).not.toContain("Create epic");
+  });
+
   it("Overview", () => {
     const html = renderToString(<Overview project={project} mapping={mapping} />);
     expect(html).toContain("Orbit roadmap (demo)");

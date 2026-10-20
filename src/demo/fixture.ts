@@ -32,8 +32,35 @@ const EPICS = [
   { title: "Offline mode", product: "mobile", prio: "low", start: 42, len: 56, done: 0 },
 ] as const;
 
+// What each epic's stories are about, so the Epic Map has real wording to compare.
+const TOPICS = [
+  ["signup wizard steps", "welcome email sequence", "workspace setup checklist", "trial activation", "first-run product tour"],
+  ["invoice PDF layout", "saved payment methods", "card checkout with Stripe", "sales tax calculation", "billing history page"],
+  ["usage metering events", "price tier tables", "rating pipeline for usage", "plan limits and overage", "metered usage aggregation"],
+  ["rate limiting per client", "cursor pagination", "OpenAPI schema", "webhook delivery retries", "versioned endpoints"],
+  ["audit event schema", "CSV export of audit events", "retention policy for logs", "admin activity feed", "compliance report download"],
+  ["push notification delivery", "APNs and FCM device tokens", "notification preferences screen", "deep links from notifications", "badge counts"],
+  ["local cache of records", "sync queue on reconnect", "conflict resolution for edits", "offline banner and states", "background sync scheduling"],
+];
+// Stories written into the wrong epic on purpose: [epic index, story index, body]. They give the
+// Epic Map overlaps, misfits and a security theme no epic owns.
+const STRAYS: [number, number, string][] = [
+  [1, 2, "Aggregate usage metering events into the rating pipeline so overage is priced from price tier tables."],
+  [0, 3, "Collect saved payment methods and run card checkout with Stripe during the signup wizard."],
+  [3, 1, "API keys with scoped token permissions, key rotation and revocation. Security review needed for secret storage."],
+  [4, 0, "Permission checks and role-based access control for who can read the access log. Security sign-off required."],
+  [5, 2, "Retry delivery from the sync queue on reconnect and keep a local cache of records while offline."],
+];
+
 const STORY_VERBS = ["Design", "Build", "Wire up", "Test", "Document", "Migrate", "Instrument", "Harden"];
 const STORY_NOUNS = ["data model", "API endpoints", "settings page", "email templates", "background job", "permissions", "error states", "metrics", "admin view", "import path"];
+
+function storyBody(ei: number, s: number): string {
+  const stray = STRAYS.find(x => x[0] === ei && x[1] === s);
+  if (stray) return stray[2];
+  const t = TOPICS[ei]!;
+  return `Covers ${t[s % t.length]} and ${t[(s + 2) % t.length]} for ${EPICS[ei]!.title.toLowerCase()}.`;
+}
 
 export interface Fixture { meta: Meta; items: RawItem[]; anchor: string }
 
@@ -75,6 +102,7 @@ export function makeFixture(anchor: string): Fixture {
         id: `item-${n}`, type: "ISSUE", isArchived: false, fieldValues: { nodes: fv },
         content: {
           __typename: "Issue", id: issueId(n), number: n, title: `${STORY_VERBS[(s + ei) % STORY_VERBS.length]} ${STORY_NOUNS[(s * 3 + ei) % STORY_NOUNS.length]}`,
+          body: storyBody(ei, s),
           url: `https://github.com/${REPO}/issues/${n}`, state: closed ? "CLOSED" : "OPEN", stateReason: closed ? "COMPLETED" : null,
           createdAt: created, closedAt, updatedAt: closedAt ?? ts(day(anchor, -Math.floor(r() * 40))),
           repository: repoRef(ei % 3 === 2 ? REPO2 : REPO),
@@ -99,7 +127,7 @@ export function makeFixture(anchor: string): Fixture {
         { __typename: "ProjectV2ItemFieldSingleSelectValue", name: e.prio[0]!.toUpperCase() + e.prio.slice(1), optionId: "p", ...field("Priority") },
       ] },
       content: {
-        __typename: "Issue", id: issueId(epicNum), number: epicNum, title: e.title, url: `https://github.com/${REPO}/issues/${epicNum}`,
+        __typename: "Issue", id: issueId(epicNum), number: epicNum, title: e.title, body: `${e.title}: ${TOPICS[ei]!.join(", ")}.`, url: `https://github.com/${REPO}/issues/${epicNum}`,
         state: e.done === 1 ? "CLOSED" : "OPEN", stateReason: e.done === 1 ? "COMPLETED" : null,
         createdAt: ts(day(anchor, e.start - 21)), closedAt: e.done === 1 ? ts(day(anchor, e.start + e.len - 2)) : null, updatedAt: ts(day(anchor, -2)),
         repository: repoRef(REPO),
@@ -114,7 +142,7 @@ export function makeFixture(anchor: string): Fixture {
   // A few loose items: a draft, an undated issue with no owner, a merged PR.
   items.push(
     { id: "item-draft-1", type: "DRAFT_ISSUE", isArchived: false, fieldValues: { nodes: [] },
-      content: { __typename: "DraftIssue", title: "Explore SSO for enterprise tier", createdAt: ts(day(anchor, -5)), updatedAt: ts(day(anchor, -5)), assignees: { nodes: [] } } },
+      content: { __typename: "DraftIssue", title: "Explore SSO for enterprise tier", body: "SAML and OIDC single sign-on, enforced login policies and session security for enterprise workspaces.", createdAt: ts(day(anchor, -5)), updatedAt: ts(day(anchor, -5)), assignees: { nodes: [] } } },
     { id: "item-loose-1", type: "ISSUE", isArchived: false, fieldValues: { nodes: [] },
       content: { __typename: "Issue", number: ++num, title: "Flaky checkout test on CI", url: `https://github.com/${REPO}/issues/${num}`, state: "OPEN", stateReason: null,
         createdAt: ts(day(anchor, -50)), closedAt: null, updatedAt: ts(day(anchor, -45)), repository: { nameWithOwner: REPO },

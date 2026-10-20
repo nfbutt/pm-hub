@@ -1,0 +1,49 @@
+/* Epic Map: a canvas on a soft dot grid with a panel of scores and suggestions beside it. */
+:root {
+  --cat-frontend: #1f6fb2; --cat-backend: #5a3fa0; --cat-security: #c0362c; --cat-data: #2f6f62; --cat-infra: #6b7785;
+  --cat-business: #a1561c; --cat-mobile: #b0408a; --cat-quality: #7a7a12; --cat-docs: #3a7d9c; --cat-other: #8a94a3;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --cat-frontend: #6fb3ee; --cat-backend: #b49cf0; --cat-security: #ff6b5e; --cat-data: #7cc7b5; --cat-infra: #a9b4c2;
+    --cat-business: #f0a868; --cat-mobile: #f08cc8; --cat-quality: #d6d65a; --cat-docs: #7fc8e8; --cat-other: #8f9bab;
+  }
+}
+:root[data-theme="dark"] {
+  --cat-frontend: #6fb3ee; --cat-backend: #b49cf0; --cat-security: #ff6b5e; --cat-data: #7cc7b5; --cat-infra: #a9b4c2;
+  --cat-business: #f0a868; --cat-mobile: #f08cc8; --cat-quality: #d6d65a; --cat-docs: #7fc8e8; --cat-other: #8f9bab;
+}
+
+.emap { display: grid; gap: 12px; }
+.emap-body { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 12px; align-items: start; }
+@media (max-width: 960px) { .emap-body { grid-template-columns: minmax(0, 1fr); } }
+.emap-canvas-wrap { position: relative; overflow: hidden; }
+.emap-canvas {
+  height: min(78vh, 900px); min-height: 420px;
+  background-color: var(--surface);
+  background-image: radial-gradient(color-mix(in srgb, var(--muted) 22%, transparent) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+.emap-float { position: absolute; left: 12px; top: 12px; }
+.emap-preview {
+  position: absolute; left: 50%; top: 12px; transform: translateX(-50%);
+  background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); border-radius: 999px; padding: 6px 14px; font-size: 13px;
+}
+.emap-preview.up { border-color: var(--good); color: var(--good); }
+.emap-preview.down { border-color: var(--bad); color: var(--bad); }
+.emap-panel { display: grid; gap: 10px; max-height: min(78vh, 900px); overflow: auto; }
+.emap-panel h3 { font-size: 13px; margin-bottom: 8px; }
+.emap-score-v { font-family: var(--f-mono); font-size: 40px; font-weight: 800; line-height: 1.1; }
+.emap-score-v span { font-size: 14px; color: var(--muted); font-weight: 500; }
+.emap-meter { height: 8px; border-radius: 999px; background: var(--surface-2); overflow: hidden; margin: 6px 0 8px; }
+.emap-meter i { display: block; height: 100%; background: linear-gradient(90deg, var(--warn), var(--good)); transition: width .4s ease; }
+.emap-score .good { color: var(--good); }
+.emap-score .bad { color: var(--bad); }
+.emap-list, .emap-legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; font-size: 13px; }
+.emap-list li { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: baseline; }
+.emap-list li > div { flex-basis: 100%; font-size: 12px; }
+.emap-list .btn.small { margin-left: auto; padding: 3px 9px; font-size: 12px; }
+.emap-flags { color: var(--warn); }
+.emap-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: -1px; }
+.emap-link { background: none; border: 0; padding: 0; color: var(--accent); font-weight: 600; cursor: pointer; text-align: left; }
+.emap-link:hover { text-decoration: underline; }
