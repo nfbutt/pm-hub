@@ -17,6 +17,8 @@ import { Confidence } from "./Confidence";
 import { Dependencies } from "./Dependencies";
 import { EpicMap } from "./EpicMap";
 import { Roadmap } from "./Roadmap";
+import { Planner } from "./Planner";
+import { GlobalMic } from "./voice/GlobalMic";
 import { Overview } from "./Overview";
 import { Progress } from "./Progress";
 import { Schedule } from "./Schedule";
@@ -44,6 +46,7 @@ const TABS: { id: ViewId; label: string }[] = [
   { id: "dependencies", label: "Dependencies" },
   { id: "epics", label: "Epic Map" },
   { id: "roadmap", label: "Roadmap" },
+  { id: "planner", label: "Planner" },
   { id: "changes", label: "What changed" },
   { id: "settings", label: "Settings" },
 ];
@@ -111,6 +114,7 @@ export function ProjectScreen({ source, view, onSignOut }: { source: Source; vie
   const right = (
     <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
       {project && cs.ready && <ChangeBar cs={cs} githubOnly={githubOnly} setGithubOnly={setGithubOnly} reviewHref={hrefFor(routeFor("review"))} />}
+      <GlobalMic settings={prefs.local} />
       {source.kind === "github" && (
         <>
           {rate && rate.remaining < 500 && (
@@ -166,6 +170,7 @@ export function ProjectScreen({ source, view, onSignOut }: { source: Source; vie
               history={history} reviewHref={hrefFor(routeFor("review"))} />}
             {active === "roadmap" && <Roadmap project={shown} mapping={mapping} draft={draft} editor={editor} local={prefs.local}
               zoom={prefs.zoom} today={new Date().toISOString().slice(0, 10)} />}
+            {active === "planner" && <Planner project={shown} mapping={mapping} editor={editor} local={prefs.local} />}
             {active === "changes" && project && (
               <Changes base={project} edited={shown} mapping={mapping} history={history} compareId={compare?.id ?? null}
                 onCompare={(id, b) => { compareTo(id, b); if (id) location.hash = hrefFor(routeFor("gantt")); }} settingsHref={hrefFor(routeFor("settings"))} />

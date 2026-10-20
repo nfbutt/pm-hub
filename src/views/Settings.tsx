@@ -1,7 +1,7 @@
 import { labelPrefixes, type LaneRule, type Mapping, type ReleaseRule } from "../model/mapping";
 import type { Project } from "../model/normalize";
 import type { Prefs } from "../store/cache";
-import { defaultLocal, testConnection } from "../ai/local";
+import { DEFAULT_VOICE_BASE, defaultLocal, testConnection } from "../ai/local";
 import { useState } from "react";
 import type { ReactNode } from "react";
 
@@ -134,6 +134,14 @@ export function Settings({ project, mapping, setMapping, resetMapping, prefs, se
         <div className="setting">
           <label htmlFor="ai-embed">Embedding model</label>
           <input id="ai-embed" className="input" value={local.embedModel} onChange={e => setLocal({ embedModel: e.target.value })} />
+        </div>
+        <div className="setting">
+          <label htmlFor="ai-voice">Speech server</label>
+          <input id="ai-voice" className="input" value={local.voiceBase ?? DEFAULT_VOICE_BASE} onChange={e => setLocal({ voiceBase: e.target.value })} />
+          <span className="muted">
+            A separate server for turning speech into text, such as Speaches. The chat model usually cannot do it.
+            The microphone in the top bar sends your voice there, and nowhere else.
+          </span>
         </div>
         <div className="drow">
           <button className="btn" onClick={probeConnection} disabled={probing}>{probing ? "Testing…" : "Test connection"}</button>
