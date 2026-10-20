@@ -45,6 +45,9 @@ export function speak(text: string, lang = "en-GB") {
   speechSynthesis.speak(u);
 }
 
+/** Reads a line out loud. The name the views use. */
+export const say = speak;
+
 /** Stops reading out loud. */
 export function stopSpeaking() {
   if (typeof speechSynthesis !== "undefined") speechSynthesis.cancel();

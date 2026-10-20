@@ -125,3 +125,6 @@
 .planner { display: grid; gap: 12px; max-width: 900px; }
 .planner .emap-list li { align-items: baseline; }
 .planner .emap-list ul.emap-list { margin: 2px 0 0 18px; }
+
+/* the command menu: one surface for typing, saying and choosing */
+.cmdk-mic { display: flex; gap: 8px; align-items: center; padding: 0 2px; font-size: 12px; }

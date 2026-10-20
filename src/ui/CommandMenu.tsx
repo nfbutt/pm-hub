@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   addBlocker, epicOptions, laneOptions, milestoneOptions, moveToParent, newItem, setLane, setMilestone, setOption, setState, shiftDates,
 } from "../model/edits";
@@ -6,11 +6,17 @@ import type { Mapping } from "../model/mapping";
 import type { Item, Project } from "../model/normalize";
 import type { Op } from "../model/ops";
 import type { Editor } from "../views/useChangeSet";
+import { findTargets } from "../model/command/targets";
+import { fillSlot, parseIntent, slotPhrase, type Intent, type Slot } from "../model/command/intent";
+import { intentOps } from "../model/command/ops";
+import { useDictation } from "../views/voice/useDictation";
 import { PickList } from "./Picker";
 
 type Step =
   | { kind: "list"; title: string; options: { value: string; label: string; hint?: string }[]; onPick: (v: string) => void }
-  | { kind: "text"; title: string; placeholder: string; onSubmit: (text: string) => void };
+  | { kind: "text"; title: string; placeholder: string; onSubmit: (text: string) => void }
+  /** A phrase that needs to know which item it meant. */
+  | { kind: "phrase"; title: string; intent: Intent; slot: Slot; options: { value: string; label: string; hint?: string }[] };
 
 interface Props {
   project: Project; mapping: Mapping; editor?: Editor;
@@ -18,11 +24,16 @@ interface Props {
   views: { id: string; label: string }[]; go: (view: string) => void;
   undo: () => void; redo: () => void; toggleGithubOnly: () => void;
   onClose: () => void;
+  /** The model on this computer, so the microphone has somewhere to send the audio. */
+  local?: { enabled: boolean; base: string; chatModel: string; embedModel: string; voiceBase?: string; voiceModel?: string };
+  /** Says something out loud, so a spoken command can be answered. */
+  speak?: (text: string) => void;
 }
 
 /** Ctrl/Cmd+K: every edit and navigation, acting on the current selection. */
-export function CommandMenu({ project, mapping, editor, selected, onSelect, views, go, undo, redo, toggleGithubOnly, onClose }: Props) {
+export function CommandMenu({ project, mapping, editor, selected, onSelect, views, go, undo, redo, toggleGithubOnly, onClose, local, speak }: Props) {
   const [step, setStep] = useState<Step | null>(null);
+  const [query, setQuery] = useState("");
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { e.preventDefault(); if (step) setStep(null); else onClose(); } };
     addEventListener("keydown", onKey, true);
@@ -36,7 +47,14 @@ export function CommandMenu({ project, mapping, editor, selected, onSelect, view
   const statusDef = mapping.statusField ? project.fields.find(f => f.name === mapping.statusField && f.kind === "single") : undefined;
   const prioDef = mapping.priority.kind === "field" ? project.fields.find(f => f.name === (mapping.priority as { field: string }).field && f.kind === "single") : undefined;
 
-  const actions: { id: string; label: string; hint?: string; run: () => void }[] = [];
+  // The microphone: the words go into the same box, so speaking and typing are one thing.
+  const dictation = useDictation(local ?? { enabled: false, base: "", chatModel: "", embedModel: "" },
+    text => setQuery(q => (q ? `${q} ${text}` : text)));
+
+  // What the person typed, read as a sentence: "move the API epic two weeks later".
+  const phrase = useMemo(() => (query.trim() && !step ? parseIntent(query) : null), [query, step]);
+
+  const actions: { id: string; label: string; hint?: string; pinned?: boolean; run: () => void }[] = [];
   if (editor && n > 0) {
     for (const [d, l] of [[7, "+1 week"], [-7, "−1 week"], [14, "+2 weeks"], [-14, "−2 weeks"]] as const)
       actions.push({ id: `shift${d}`, label: `Shift ${what} ${l}`, hint: d === 7 ? "]" : d === -7 ? "[" : undefined, run: () => run(`Shifted ${what} ${l}`, shiftDates(project, mapping, [...selected], d)) });
@@ -71,6 +89,28 @@ export function CommandMenu({ project, mapping, editor, selected, onSelect, view
   for (const v of views) actions.push({ id: `go-${v.id}`, label: `Go to ${v.label}`, run: () => { go(v.id); onClose(); } });
   actions.push({ id: "ghonly", label: "Toggle “GitHub only”", run: () => { toggleGithubOnly(); onClose(); } });
 
+  // A sentence, if it is one. A sentence that works sits at the top of the list, whatever
+  // else was typed; one that needs to know which item it meant waits at the end.
+  if (phrase) {
+    const result = intentOps(project, mapping, phrase.intent);
+    if (result.question) {
+      const slot = phrase.missing?.slot ?? "target";
+      const candidates = findTargets(project, mapping, slotPhrase(phrase.intent, slot), 6);
+      actions.push({
+        id: "phrase-ask", label: result.question, hint: query,
+        run: () => setStep({
+          kind: "phrase", title: result.question!, intent: phrase.intent, slot,
+          options: candidates.map(c => ({ value: c.title, label: c.title, hint: c.kind === "epic" ? "epic" : undefined })),
+        }),
+      });
+    } else if (result.ops.length) {
+      actions.unshift({
+        id: "phrase-do", label: result.label, hint: "from what you said", pinned: true,
+        run: () => { speak?.(result.label); run(result.label, result.ops); },
+      });
+    }
+  }
+
   return (
     <div className="modal cmdk-back" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="cmdk" role="dialog" aria-modal="true" aria-label="Command menu">
@@ -78,11 +118,45 @@ export function CommandMenu({ project, mapping, editor, selected, onSelect, view
           {step ? <><button className="linkbtn" onClick={() => setStep(null)}>← Back</button><b>{step.title}</b></>
             : <span className="muted">{n ? `${n} selected` : "Nothing selected: Ctrl-click rows in Gantt, or tick rows in Plan"}</span>}
         </div>
-        {!step && <PickList options={actions.map(a => ({ value: a.id, label: a.label, hint: a.hint }))} placeholder="Type a command…" onPick={id => actions.find(a => a.id === id)?.run()} />}
+        {!step && (
+          <>
+            <PickList options={actions.map(a => ({ value: a.id, label: a.label, hint: a.hint, pinned: a.pinned }))} placeholder="Type a command, or say what you want…"
+              value={query} onQuery={setQuery} onPick={id => actions.find(a => a.id === id)?.run()} />
+            {local?.enabled && (
+              <div className="cmdk-mic">
+                <button className={`btn small ${dictation.listening ? "primary" : ""}`} onClick={dictation.toggle} disabled={dictation.working}
+                  title={dictation.listening ? "Stop listening" : "Say it instead of typing it"}>
+                  {dictation.listening ? "◼ Listening…" : dictation.working ? "…" : "🎤"}
+                </button>
+                {dictation.error && <span className="muted">{dictation.error}</span>}
+              </div>
+            )}
+          </>
+        )}
         {step?.kind === "list" && <PickList key={step.title} options={step.options} placeholder={`Find ${step.title.toLowerCase()}…`} onPick={step.onPick} />}
         {step?.kind === "text" && <TextStep step={step} />}
+        {step?.kind === "phrase" && <PhraseStep step={step} project={project} mapping={mapping} onDone={run} onSpeak={speak} />}
       </div>
     </div>
+  );
+}
+
+/** Which item did the sentence mean? Then it does it. */
+function PhraseStep({ step, project, mapping, onDone, onSpeak }: {
+  step: Extract<Step, { kind: "phrase" }>;
+  project: Project; mapping: Mapping;
+  onDone: (label: string, ops: Op[]) => void;
+  onSpeak?: (text: string) => void;
+}) {
+  return (
+    <>
+      <PickList options={step.options} placeholder="Which one?" onPick={title => {
+        const intent = fillSlot(step.intent, step.slot, title);
+        const result = intentOps(project, mapping, intent);
+        if (result.question) { onSpeak?.(result.question); return; }
+        onDone(result.label, result.ops);
+      }} />
+    </>
   );
 }
 
