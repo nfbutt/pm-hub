@@ -102,6 +102,8 @@ export function Settings({ project, mapping, setMapping, resetMapping, prefs, se
           options={[["none", "None"], ["milestone", "Milestones"], ...iterations.map(s => [`iteration:${s}`, `Iteration: ${s}`] as [string, string]), ...singles.map(s => [`field:${s}`, `Field: ${s}`] as [string, string])]} />
         <Select id="m-status" label="Status field" value={mapping.statusField ?? ""} onChange={v => set({ statusField: v || null })}
           options={[["", "None"], ...singles.map(s => [s, s] as [string, string])]} />
+        <Select id="m-reldue" label="Release due date" value={mapping.releaseDueField ?? ""} onChange={v => set({ releaseDueField: v || null })}
+          options={[["", "None"], ...dates.map(d => [d, d] as [string, string])]} hint="The date field that says when a release is due." />
         <Select id="m-prio" label="Priority" value={prioValue}
           onChange={v => set({ priority: v.startsWith("field:") ? { kind: "field", field: v.slice(6) } : v.startsWith("prefix:") ? { kind: "labelPrefix", prefix: v.slice(7) } : { kind: "none" } })}
           options={[["none", "None"], ...singles.map(s => [`field:${s}`, `Field: ${s}`] as [string, string]), ...prefixes.map(p => [`prefix:${p}`, `Labels starting “${p}:”`] as [string, string])]} />

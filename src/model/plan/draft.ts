@@ -11,8 +11,27 @@ export interface DraftStory {
   title: string;
   /** Why this piece of work is needed, in the model's words. */
   why: string;
-  /** How long it is expected to take, in days. */
+  /** The most likely length, in days. */
   days: number;
+  /** The optimistic and pessimistic lengths, when the model gave them. */
+  best?: number;
+  worst?: number;
+}
+
+/**
+ * How long a piece of work really takes: three points, averaged the way PERT does, with
+ * the range it could be. A single number from a model is optimistic and unbounded, so the
+ * range is what travels with it.
+ */
+export function estimate(story: DraftStory): { expected: number; low: number; high: number } {
+  const o = Math.max(1, Math.min(90, Math.round(story.best ?? story.days)));
+  const m = Math.max(1, Math.min(90, Math.round(story.days)));
+  const p = Math.max(1, Math.min(120, Math.round(story.worst ?? story.days)));
+  return {
+    expected: Math.max(1, Math.round((o + 4 * m + p) / 6)),
+    low: Math.min(o, m, p),
+    high: Math.max(o, m, p),
+  };
 }
 
 export interface DraftEpic {
@@ -79,7 +98,9 @@ export function checkDraft(project: Project, mapping: Mapping, draft: PlanDraft)
       const st = (s.title ?? "").trim();
       if (!st) continue;
       const days = Number.isFinite(s.days) ? Math.max(1, Math.min(90, Math.round(s.days))) : 1;
-      stories.push({ title: st, why: (s.why ?? "").trim(), days });
+      const best = Number.isFinite(s.best) ? Math.max(1, Math.min(90, Math.round(s.best!))) : undefined;
+      const worst = Number.isFinite(s.worst) ? Math.max(1, Math.min(120, Math.round(s.worst!))) : undefined;
+      stories.push({ title: st, why: (s.why ?? "").trim(), days, best, worst });
     }
     epics.push({ title, why: (e.why ?? "").trim(), release, start, end, stories, after: e.after ?? [] });
   }
@@ -156,7 +177,7 @@ export function draftOps(project: Project, mapping: Mapping, draft: PlanDraft): 
       const sFields: Record<string, FieldValue> = {};
       // A story runs inside the epic's window, unless the epic has no dates.
       if (e.start && dateFields.start) sFields[dateFields.start] = { kind: "date", date: e.start };
-      if (e.start && dateFields.end) sFields[dateFields.end] = { kind: "date", date: addDays(e.start, s.days - 1) };
+      if (e.start && dateFields.end) sFields[dateFields.end] = { kind: "date", date: addDays(e.start, estimate(s).expected - 1) };
       ops.push({ kind: "create", key: newKey(), item: { title: s.title, repo, parentKey: key, labels: story ? [story] : [], fields: sFields } });
     }
   }

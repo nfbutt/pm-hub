@@ -45,8 +45,9 @@ export function promptPlan(ctx: PlanContext, description: string): string {
     'the titles of the epics that must be finished before it ("after").',
     "",
     'Answer with {"name": "...", "summary": "...", "epics": [{"title": "...", "why": "...", "release": null,',
-    '"start": "2026-01-01", "end": "2026-02-01", "stories": [{"title": "...", "why": "...", "days": 3}], "after": []}]}.',
+    '"start": "2026-01-01", "end": "2026-02-01", "stories": [{"title": "...", "why": "...", "days": 3, "best": 2, "worst": 6}], "after": []}]}.',
     "Give every epic two to five stories, and keep the whole plan under forty pieces of work.",
+    "For each story give three lengths in days: the optimistic one, the most likely one in \"days\", and the pessimistic one. Be honest about the worst case.",
   ].filter(Boolean).join("\n");
 }
 

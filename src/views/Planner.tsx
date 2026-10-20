@@ -6,7 +6,7 @@ import { checkPlan, promptPlan, SYSTEM_PLAN, type PlanContext } from "../ai/plan
 import { chatJson, defaultLocal, type LocalSettings } from "../ai/local";
 import { isEpic, releaseOf } from "../model/mapping";
 import type { Project } from "../model/normalize";
-import { checkDraft, draftOps, summariseDraft, type PlanDraft } from "../model/plan/draft";
+import { checkDraft, draftOps, estimate, summariseDraft, type PlanDraft } from "../model/plan/draft";
 import type { Editor } from "./useChangeSet";
 import { VoiceInput } from "./voice/VoiceInput";
 
@@ -114,7 +114,10 @@ export function Planner({ project, mapping, editor, local }: {
                     {e.why && <div className="muted">{e.why}</div>}
                     {e.stories.length > 0 && (
                       <ul className="emap-list" style={{ marginTop: 2 }}>
-                        {e.stories.map(s => <li key={s.title}><span className="muted">{s.days}d</span> {s.title}</li>)}
+                        {e.stories.map(s => {
+                          const est = estimate(s);
+                          return <li key={s.title}><span className="muted">{est.expected}d{est.low !== est.high ? ` (${est.low}–${est.high})` : ""}</span> {s.title}</li>;
+                        })}
                       </ul>
                     )}
                     {e.after.length > 0 && <div className="muted">after: {e.after.join(", ")}</div>}

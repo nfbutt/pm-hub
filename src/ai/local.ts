@@ -218,30 +218,32 @@ export function checkLinks(v: unknown): v is { links: ProposedLink[] } {
 }
 
 export const SYSTEM_RELEASES = [
-  "You group work into releases. You only use the release names and item keys you are given.",
+  "You label work with the theme it belongs to, using only the themes you are given.",
   "You answer with JSON only.",
 ].join(" ");
 
-/** Asks which epics should ship together. */
-export function promptReleases(epics: { key: string; title: string; release: string | null }[], releases: string[]): string {
+/**
+ * Asks what theme each piece of work belongs to, one label per item. The labels are
+ * closed, and pm-hub does the grouping: asking a model to group things itself means the
+ * same project comes out grouped differently every time, and a roadmap that churns is
+ * worse than no roadmap.
+ */
+export function promptReleases(epics: { key: string; title: string; release: string | null }[], themes: string[]): string {
   return [
-    `The releases in this project are: ${releases.join(", ") || "(none yet)"}`,
-    "The epics:",
+    `The themes you may use: ${themes.join(", ") || "(none)"}`,
+    "The work:",
     ...epics.map(e => `  ${e.key} | ${e.title}${e.release ? ` | currently in ${e.release}` : " | in no release"}`),
-    "Which epics clearly belong in the same release? Only suggest a release that exists, and only when the work really goes together.",
-    "Answer with {\"releases\": [{\"release\": \"<name>\", \"epics\": [\"<key>\"], \"why\": \"<one sentence>\"}]}.",
-    "Give at most three groups.",
+    "Label each piece of work with the one theme it belongs to. If it belongs to none of them, leave it out.",
+    "Answer with {\"themes\": [{\"key\": \"<key>\", \"theme\": \"<theme>\"}]}.",
   ].join("\n");
 }
 
-/** Keeps only answers that name a release and a list of keys. */
-export function checkReleases(v: unknown): v is { releases: ProposedRelease[] } {
+/** Keeps only answers that name a real key and a theme. */
+export function checkReleases(v: unknown): v is { themes: { key: string; theme: string }[] } {
   if (typeof v !== "object" || v === null) return false;
-  const releases = (v as { releases?: unknown }).releases;
-  if (!Array.isArray(releases) || releases.length > 5) return false;
-  return releases.every(r => typeof r === "object" && r !== null
-    && typeof (r as ProposedRelease).release === "string"
-    && Array.isArray((r as ProposedRelease).epics)
-    && (r as ProposedRelease).epics.every(k => typeof k === "string")
-    && typeof (r as ProposedRelease).why === "string");
+  const themes = (v as { themes?: unknown }).themes;
+  if (!Array.isArray(themes) || themes.length > 200) return false;
+  return themes.every(t => typeof t === "object" && t !== null
+    && typeof (t as { key?: unknown }).key === "string"
+    && typeof (t as { theme?: unknown }).theme === "string");
 }
