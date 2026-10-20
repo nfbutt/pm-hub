@@ -19,6 +19,10 @@ export interface Mapping {
   release: ReleaseRule;
   statusField: string | null;
   priority: { kind: "none" } | { kind: "field"; field: string } | { kind: "labelPrefix"; prefix: string };
+  /** Which days of the week are working days: 0 is Sunday. */
+  workingDays: number[];
+  /** The days that are not working days, whatever the week says. */
+  holidays: string[];
 }
 
 const fieldsOf = (p: Project, kind: FieldDef["kind"]) => p.fields.filter(f => f.kind === kind);
@@ -84,6 +88,7 @@ export function detectMapping(p: Project): Mapping {
     startField, endField, iterationField, milestoneDates: true,
     epic: { subIssues: true, issueTypes, label: typeLike },
     lane, release, statusField, priority,
+    workingDays: [1, 2, 3, 4, 5], holidays: [],
   };
 }
 

@@ -13,7 +13,7 @@ Pick one of your GitHub Projects. pm-hub reads its items, field values, mileston
 | View | What you see |
 |---|---|
 | Overview | Counts, how the project's fields were interpreted, open epics with progress |
-| Gantt | Epics as bars in swimlanes, release markers, conflict flags. Drag to move or resize, drag a story onto another epic, draw a dependency between bars, rename in place, add stories |
+| Gantt | Epics as bars in swimlanes, release markers, conflict flags. Drag to move or resize, drag a story onto another epic, draw a dependency between bars, rename in place, add stories. The dependencies are drawn between the bars, and the chain that decides the end date is marked |
 | Plan | An editable table of epics and their stories: inline cells, multi-select bulk edits, copy and paste between cells |
 | Releases | One column per milestone or iteration, with what ships and how much is done |
 | Schedule | Calendar of due dates, sprint starts and epic starts and ends |
@@ -24,6 +24,7 @@ Pick one of your GitHub Projects. pm-hub reads its items, field values, mileston
 | Dependencies | Graph of blocked-by and parent links, critical path, cycles |
 | Epic Map | Epics as bubbles of tasks: overlaps, misplaced tasks, kinds of work with no epic, a structure score; drag tasks between epics; a deck of suggestions you can accept or turn down; meeting mode, a timelapse of the plan and goals to work towards |
 | Roadmap | Every epic on one timeline with the dependencies drawn between them: the chain that decides when the plan ends, how much slack each epic has, and what is broken about the plan as it stands |
+| Planner | Describe what you want to build and a model on your computer drafts the plan — epics, stories, dates, a release, what has to happen first. You review it, then it becomes one change |
 | Settings | Change how dates, epics, swimlanes, releases and priority are read; fiscal-year quarters |
 | Review | Every pending change with before and after, checked against GitHub, then applied |
 
@@ -91,6 +92,10 @@ OLLAMA_ORIGINS=https://nfbutt.github.io ollama serve
 ```
 
 Then run `ollama pull qwen3` and `ollama pull qwen3-embedding`, and set the address to `http://localhost:11434/v1` in *Settings → Local model*. LM Studio and llama.cpp's server work the same way.
+
+### Working days
+
+The chart and the plan know which days you can work in. By that is Monday to Friday; set your own in *Settings → Calendar*, along with the days that are off whatever the week says. The days nobody works in are shaded on the chart, and the plan does not count them — so a chain that runs through a weekend is not a chain that takes two extra days.
 
 ### How the plan is checked
 

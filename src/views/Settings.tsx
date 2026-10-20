@@ -6,6 +6,8 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+/** 0 is Sunday. */
+const DAYS: [number, string][] = [[1, "Mon"], [2, "Tue"], [3, "Wed"], [4, "Thu"], [5, "Fri"], [6, "Sat"], [0, "Sun"]];
 
 export function Settings({ project, mapping, setMapping, resetMapping, prefs, setPrefs, extra }: {
   project: Project; mapping: Mapping; setMapping: (m: Mapping) => void; resetMapping: () => void; prefs: Prefs; setPrefs: (p: Prefs) => void;
@@ -18,6 +20,8 @@ export function Settings({ project, mapping, setMapping, resetMapping, prefs, se
   const epicLabels = [...new Set(project.items.flatMap(i => i.labels))].filter(l => /epic/i.test(l)).sort();
   const issueTypes = [...new Set(project.items.map(i => i.issueType).filter((t): t is string => !!t))].sort();
   const set = (patch: Partial<Mapping>) => setMapping({ ...mapping, ...patch });
+  const workingDays = mapping.workingDays?.length ? mapping.workingDays : [1, 2, 3, 4, 5];
+  const holidays = mapping.holidays ?? [];
   const local = prefs.local ?? defaultLocal;
   const setLocal = (patch: Partial<typeof local>) => setPrefs({ ...prefs, local: { ...local, ...patch } });
   const [probe, setProbe] = useState<{ ok: boolean; message: string } | null>(null);
@@ -108,6 +112,25 @@ export function Settings({ project, mapping, setMapping, resetMapping, prefs, se
         <Select id="p-fy" label="Fiscal year starts in" value={String(prefs.fyStartMonth)} onChange={v => setPrefs({ ...prefs, fyStartMonth: Number(v) })}
           options={MONTHS.map((m, i) => [String(i + 1), i === 0 ? "January (calendar year)" : i === 9 ? "October (US federal)" : m] as [string, string])}
           hint="Changes the quarter labels on the timeline. Applies to every project." />
+        <fieldset className="setting">
+          <legend>Working days</legend>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            {DAYS.map(([i, name]) => (
+              <label key={name} className="check-row">
+                <input type="checkbox" checked={workingDays.includes(i)}
+                  onChange={e => setMapping({ ...mapping, workingDays: e.target.checked ? [...workingDays, i].sort() : workingDays.filter(d => d !== i) })} />
+                {name}
+              </label>
+            ))}
+          </div>
+          <span className="muted">Days nobody works in are shaded on the chart, and the plan does not count them.</span>
+        </fieldset>
+        <div className="setting">
+          <label htmlFor="m-holidays">Holidays</label>
+          <input id="m-holidays" className="input" value={holidays.join(", ")} placeholder="2026-12-25, 2027-01-01"
+            onChange={e => setMapping({ ...mapping, holidays: e.target.value.split(",").map(d => d.trim()).filter(Boolean) })} />
+          <span className="muted">Days that are not working days, whatever the week says.</span>
+        </div>
       </section>
 
       <section className="card pad settings">
