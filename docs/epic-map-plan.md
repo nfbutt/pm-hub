@@ -4,6 +4,8 @@ Where the Epic Map stands after phases 5–9, and what to build next.
 
 The research behind the last phase is in `reports/AI assisted roadmap planning.md` (87 sourced links; the raw notes are not in the repo).
 
+**There is a second analysis** in `docs/ai-planning-and-voice.md`: what to do about the Gantt, an AI that drafts a whole plan, voice, and rolling changes back. It covers the same ground from the research side and says which order to build in — the short version is that **rollback comes before the AI planner**, because a plan that creates forty issues needs somewhere to go back to.
+
 ## Where this is now
 
 The Epic Map is three views that answer three questions about a plan:
@@ -36,7 +38,23 @@ Each phase below is small enough to be one PR. The order is by value, not by eff
 
 **Not doing.** Public holidays per country, and resource levelling — that needs capacity data pm-hub does not have.
 
-### Phase 11: releases without a due date
+### Phase 11: a plan that can be rolled back
+
+**Why.** The AI planner (see `docs/ai-planning-and-voice.md`) will create dozens of issues in one apply. pm-hub's undo after an apply is a forward replay of inverse ops, offered only while the Review tab stays open, not persisted anywhere, and — for created items — wrong: `inverse(create)` is `archive`, which removes the item from the project but leaves the issue open in the repository. There is no undo ledger and no restore. The research is blunt: no tracker has a durable action-level undo ledger, and point-in-time restore against GitHub is impossible, so the tool must keep its own versioned snapshot.
+
+**What.**
+- A `Plan` object — `{ id, name, createdAt, ops }` — and a durable store of the ops, not just the labels the history keeps today.
+- The Review screen groups by plan, so a generated plan is one row rather than forty.
+- "Roll back this apply" becomes a first-class action that survives a reload, previews the calls it will make, and is conflict-aware.
+- The inverse of a create becomes close-and-archive, and the interface says plainly that the issues stay in the repository, closed, because GitHub cannot undo a creation.
+- The revert fetches archived items, so an archived item can be addressed at all.
+- The discard toast's Undo button restores what was discarded (today it undoes an earlier change instead).
+
+**Done when.** A plan of forty new issues can be applied, and rolled back days later, and the rollback is one recorded change that can itself be undone.
+
+**Not doing.** Deleting issues. GitHub cannot, and a plan that deletes things is a different product.
+
+### Phase 12: releases without a due date
 
 **Why.** A single-select "Release" field has no due date, so the plan cannot be checked against it and the Roadmap draws no release markers. The check works for milestone-based releases and is silent for field-based ones, which is worse than not having it: the plan looks fine because nothing was checked.
 
@@ -49,7 +67,7 @@ Each phase below is small enough to be one PR. The order is by value, not by eff
 
 **Not doing.** Creating milestones. The API pm-hub uses cannot create them, so a release the project does not have is a release pm-hub cannot put work into.
 
-### Phase 12: two-stage release grouping
+### Phase 13: two-stage release grouping
 
 **Why.** Today the model names the groups itself, which means the same project can be grouped differently on two runs — the "roadmap churn" failure. The safer recipe is two stages: the model labels each piece of work with a small closed theme, and pm-hub clusters on that label deterministically. The phasing is then reproducible and can be re-derived after any edit.
 
@@ -62,7 +80,7 @@ Each phase below is small enough to be one PR. The order is by value, not by eff
 
 **Not doing.** Letting the model choose dates. It is optimistic and unbounded, and it is not a commitment.
 
-### Phase 13: effort as a distribution
+### Phase 14: effort as a distribution
 
 **Why.** A model's duration estimate is optimistic and unbounded, and it is very sensitive to how the question is phrased. The defensible contract is a distribution, not a number: three points, expected value and spread computed in the browser.
 
@@ -77,6 +95,8 @@ Each phase below is small enough to be one PR. The order is by value, not by eff
 
 ### Later, when there is something to write back
 
+- **An AI that drafts a whole plan.** See `docs/ai-planning-and-voice.md`: the flow, the guardrails and what pm-hub's op model is missing. It goes after phase 11, because a plan that creates dozens of issues needs somewhere to roll back to.
+- **Voice.** A local transcription server and a mic that types into the focused field. The browser's own Web Speech API uploads audio to a Google server, so it is out by default.
 - **Link types and lag.** Finish-to-start, start-to-start, finish-to-finish, start-to-finish, and a signed lag. GitHub only has "blocked by", so there is nowhere to write these yet; the plan model would need the field before the interface can.
 - **Resource levelling.** Smoothing first (it never moves the critical path), levelling only as a trade the user opts into. Needs per-person capacity, which pm-hub has hints of but not enough of.
 - **Work outside the project.** The loader fetches only what is in the project, so a dependency on an issue that is not in it can only be reported, never modelled.
