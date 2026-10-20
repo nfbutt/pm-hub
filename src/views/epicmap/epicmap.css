@@ -62,3 +62,24 @@
 .emap-card-title { font-weight: 700; font-size: 13px; }
 .emap-card-why { font-size: 12px; }
 .emap-card-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* timelapse */
+.emap-timelapse .chartbox { margin-bottom: 6px; }
+.emap-slider { width: 100%; accent-color: var(--accent); }
+.emap-timelapse-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12px; }
+.emap-timelapse-row .muted { flex: 1; min-width: 0; }
+
+/* meeting mode: the map stays visible behind the panel */
+.meeting { position: fixed; inset: 0; z-index: 55; background: rgba(10, 18, 28, .28); display: grid; justify-items: end; }
+.meeting-panel {
+  width: min(420px, 100%); height: 100%; overflow: auto; background: var(--bg); border-left: 1px solid var(--line);
+  padding: 18px 18px calc(24px + env(safe-area-inset-bottom, 0px)); display: grid; gap: 12px; align-content: start;
+  box-shadow: var(--shadow);
+}
+.meeting-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.meeting-item { display: grid; gap: 8px; justify-items: start; }
+.meeting-item h3 { font-size: 17px; font-weight: 800; }
+.meeting-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.meeting-tally { font-size: 13px; }
+.meeting-summary { display: grid; gap: 10px; justify-items: start; }
+.meeting-summary .emap-list li { justify-content: space-between; }

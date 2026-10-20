@@ -19,6 +19,7 @@ import { CommandMenu } from "../src/ui/CommandMenu";
 import { buildSchedule } from "../src/model/schedule";
 import { Dependencies, layoutGraph } from "../src/views/Dependencies";
 import { EpicMap } from "../src/views/EpicMap";
+import { MeetingMode } from "../src/views/epicmap/MeetingMode";
 import { BurnUp } from "../src/views/BurnUp";
 import { Confidence } from "../src/views/Confidence";
 import { Progress } from "../src/views/Progress";
@@ -41,10 +42,20 @@ describe("views render with the demo project", () => {
     expect(html).toContain("Accept");
     expect(html).toContain("Snooze");
     expect(html).toContain("Local analysis");
+    expect(html).toContain("Quests");
+    expect(html).toContain("Meeting mode");
     const ro = renderToString(<EpicMap project={project} mapping={mapping} draft={emptyDraft()} />);
     expect(ro).toContain("Read-only");
     expect(ro).not.toContain("Accept");
     expect(ro).not.toContain("Snooze");
+  });
+
+  it("Meeting mode shows one item at a time and a tally", () => {
+    const html = renderToString(<MeetingMode agenda={[{ id: "a", kind: "epic", title: "Offline mode", why: "Mixes many kinds of work", focus: ["x"] }]}
+      tally={{ moves: 1, merges: 0, epics: 0, score: 2 }} onClose={noop} onFocus={noop} onAccept={noop} reviewHref="#/review" readOnly={false} />);
+    expect(html).toContain("Offline mode");
+    expect(html).toContain("Item 1 of 1");
+    expect(html).toContain("So far");
   });
 
   it("Overview", () => {
@@ -164,11 +175,11 @@ describe("editing surfaces render", () => {
   });
 
   const history: HistoryState = {
-    config: { mode: "local" }, setConfig: noop, baselines: [], changes: [
+    config: { mode: "local" }, setConfig: noop, baselines: [], quests: [], changes: [
       { version: 1, at: "2026-03-01T00:00:00.000Z", author: "me", scenario: "Default", steps: [{ label: "Moved Orbit", status: "applied", kind: "setDates", reason: "vendor late" }] },
     ],
     loading: false, error: null, author: "me", reload: noop,
-    saveBaseline: async () => {}, readBaseline: async () => { throw new Error("none"); }, saveChange: async () => {},
+    saveBaseline: async () => {}, readBaseline: async () => { throw new Error("none"); }, saveChange: async () => {}, saveQuest: async () => {},
   };
   it("Changes", () => {
     const html = renderToString(<Changes base={project} edited={project} mapping={mapping} history={history} compareId={null} onCompare={noop} settingsHref="#" />);

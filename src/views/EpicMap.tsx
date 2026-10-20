@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { analyze, scoreIfMoved, type EpicMapModel } from "../model/epicmap";
 import { categoryName } from "../model/epicmap/categories";
+import { LENSES, lensColours, lensValue, type Lens } from "../model/epicmap/lens";
+import { quests } from "../model/epicmap/quests";
 import { ideaSuggestion, suggestions, visibleSuggestions, type Suggestion, type SuggestionMemory } from "../model/epicmap/suggest";
 import { moveToParent } from "../model/edits";
 import type { Mapping } from "../model/mapping";
@@ -10,8 +12,11 @@ import { buildSchedule, findConflicts, type Draft } from "../model/schedule";
 import { rejectSuggestion, snoozeSuggestion, readSuggestionMemory } from "../store/epicmap";
 import { ItemDrawer } from "./ItemDrawer";
 import type { Editor } from "./useChangeSet";
+import type { HistoryState } from "./useHistory";
 import type { DropTarget, MapCanvas } from "./epicmap/canvas";
+import { MeetingMode, type AgendaItem, type MeetingTally } from "./epicmap/MeetingMode";
 import { Suggestions } from "./epicmap/Suggestions";
+import { Timelapse } from "./epicmap/Timelapse";
 import { useLocalChat, useLocalVectors } from "./useLocalModel";
 import "./epicmap/epicmap.css";
 
@@ -21,15 +26,22 @@ export interface EpicMapLocal { enabled: boolean; base: string; chatModel: strin
 /** No model: the same object every time, so the effects do not run again and again. */
 const NO_MODEL: EpicMapLocal = { enabled: false, base: "", chatModel: "", embedModel: "" };
 
-export function EpicMap({ project, mapping, draft, editor, local }: {
+export function EpicMap({ project, mapping, draft, editor, local, history, reviewHref }: {
   project: Project; mapping: Mapping; draft: Draft; editor?: Editor;
   local?: EpicMapLocal;
+  /** The plan history, for the timelapse and the quests. */
+  history?: HistoryState;
+  /** Where the Review tab is, for the end of a meeting. */
+  reviewHref?: string;
 }) {
   const [openOnly, setOpenOnly] = useState(true);
   const [open, setOpen] = useState<string | null>(null);
   const [hover, setHover] = useState<{ key: string; target: DropTarget } | null>(null);
   const [memory, setMemory] = useState<SuggestionMemory>({});
   const [lit, setLit] = useState<string | null>(null);
+  const [lens, setLens] = useState<Lens>("category");
+  const [meeting, setMeeting] = useState(false);
+  const [tally, setTally] = useState<MeetingTally>({ moves: 0, merges: 0, epics: 0, score: 0 });
   const settings = local ?? NO_MODEL;
   // With a model on this computer, the map compares work by meaning.
   const vectors = useLocalVectors(project, settings);
@@ -37,6 +49,8 @@ export function EpicMap({ project, mapping, draft, editor, local }: {
   const chat = useLocalChat(project, model, settings);
   // The score when the tab opened, so a meeting can see how far it moved things.
   const [startScore] = useState(() => model.score);
+  // The map as it was, so the quests can see how far the team has come.
+  const [startModel] = useState(() => model);
   const byKey = useMemo(() => new Map(project.items.map(i => [i.key, i])), [project]);
   const title = (k: string | null) => (k ? byKey.get(k)?.title ?? k : "No epic");
 
@@ -55,7 +69,16 @@ export function EpicMap({ project, mapping, draft, editor, local }: {
   }, [model, project, mapping, chat.ideas]);
   const deck = useMemo(() => visibleSuggestions(all, memory), [all, memory]);
   useEffect(() => { void readSuggestionMemory(project.owner, project.number).then(setMemory); }, [project.owner, project.number]);
-  const accept = (s: Suggestion) => record(`Accepted: ${s.title}`, s.ops);
+  const accept = (s: Suggestion) => {
+    record(`Accepted: ${s.title}`, s.ops);
+    // What the team did in this meeting, for the tally at the end.
+    setTally(t => ({
+      ...t,
+      moves: t.moves + (s.kind === "move" ? 1 : 0),
+      merges: t.merges + (s.kind === "merge" ? 1 : 0),
+      epics: t.epics + (s.kind === "gap" ? 1 : 0),
+    }));
+  };
   const turnDown = (s: Suggestion) => {
     setMemory(m => ({ ...m, [s.id]: "rejected" }));
     void rejectSuggestion(project.owner, project.number, s.id);
@@ -68,8 +91,8 @@ export function EpicMap({ project, mapping, draft, editor, local }: {
 
   const box = useRef<HTMLDivElement>(null);
   const canvas = useRef<MapCanvas | null>(null);
-  const latest = useRef({ move, model });
-  latest.current = { move, model };
+  const latest = useRef({ move, model, lens });
+  latest.current = { move, model, lens };
   const [failed, setFailed] = useState(false);
   useEffect(() => {
     let dead = false;
@@ -86,12 +109,12 @@ export function EpicMap({ project, mapping, draft, editor, local }: {
           document.getElementById(`emap-suggestion-${id}`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
         },
       });
-      canvas.current.update(latest.current.model, !editor);
+      canvas.current.update(latest.current.model, !editor, latest.current.lens);
     }, () => setFailed(true));
     return () => { dead = true; canvas.current?.destroy(); canvas.current = null; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  useEffect(() => { canvas.current?.update(model, !editor); }, [model, editor]);
+  useEffect(() => { canvas.current?.update(model, !editor, lens); }, [model, editor, lens]);
 
   const schedule = useMemo(() => buildSchedule(project, mapping, draft), [project, mapping, draft]);
   const original = useMemo(() => buildSchedule(editor?.base ?? project, mapping), [editor?.base, project, mapping]);
@@ -102,6 +125,34 @@ export function EpicMap({ project, mapping, draft, editor, local }: {
   const epics = [...model.epics].sort((a, b) => (a.health ?? 101) - (b.health ?? 101));
   const connected = vectors.status === "on" || chat.status === "on";
   const unreachable = settings.enabled && !connected && vectors.status !== "working" && chat.status !== "working";
+
+  // What the map is coloured by, and the groups that come out of it.
+  const groups = useMemo(() => {
+    if (lens === "category") return null;
+    const values = [...model.epics.map(e => lensValue(lens, e)), ...model.tasks.map(t => lensValue(lens, t))];
+    const colours = lensColours(values);
+    return [...colours.keys()].map(value => ({ value, colour: colours.get(value)! }));
+  }, [lens, model]);
+
+  // The quests the team is working through, and the ones already finished.
+  const questList = useMemo(() => quests(startModel, model), [startModel, model]);
+  const savedQuests = useRef(new Set<string>());
+  useEffect(() => {
+    const done = questList.filter(q => q.done && !savedQuests.current.has(q.id));
+    if (!done.length || !history) return;
+    for (const q of done) savedQuests.current.add(q.id);
+    void history.saveQuest({ version: 1, at: new Date().toISOString(), author: history.author, quests: done.map(q => ({ id: q.id, name: q.name })) });
+  }, [questList, history]);
+
+  // The agenda of a meeting: the worst epics first, then the best advice.
+  const agenda = useMemo<AgendaItem[]>(() => [
+    ...epics.slice(0, 5).map(e => ({
+      id: `epic:${e.key}`, kind: "epic" as const, title: e.title,
+      why: e.flags.length ? e.flags.join(" · ") : `Health ${e.health ?? "—"}, ${e.taskKeys.length} tasks.`,
+      focus: [e.key],
+    })),
+    ...deck.slice(0, 5).map(s => ({ id: s.id, kind: "suggestion" as const, title: s.title, why: s.why, focus: s.epics, suggestion: s })),
+  ], [epics, deck]);
 
   return (
     <div className="emap">
@@ -114,7 +165,11 @@ export function EpicMap({ project, mapping, draft, editor, local }: {
           <span className={`pill ${connected ? "accent" : unreachable ? "warn" : ""}`} title={unreachable ? "The model on this computer did not answer. pm-hub is using its own analysis." : undefined}>
             {connected ? "✦ Qwen connected" : unreachable ? "✦ Qwen not answering" : "Local analysis"}
           </span>
+          <div className="seg" role="group" aria-label="Colour the map by">
+            {LENSES.map(l => <button key={l.id} className={lens === l.id ? "on" : ""} onClick={() => setLens(l.id)}>{l.name}</button>)}
+          </div>
           <label className="check-row"><input id="em-open" type="checkbox" checked={openOnly} onChange={() => setOpenOnly(!openOnly)} /> Open work only</label>
+          <button className="btn" onClick={() => setMeeting(true)}>Meeting mode</button>
           <button className="btn" onClick={() => canvas.current?.fit()}>Fit</button>
           <button className="btn" onClick={() => canvas.current?.relayout()}>Shuffle layout</button>
         </div>
@@ -145,7 +200,7 @@ export function EpicMap({ project, mapping, draft, editor, local }: {
             onAccept={accept}
             onReject={turnDown}
             onSnooze={wait}
-            onFocus={s => canvas.current?.focusMany(s ? s.epics : [])}
+            onFocus={s => canvas.current?.focusMany(s ? (s.epics.length ? s.epics : s.items.slice(0, 3)) : [])}
             readOnly={!editor}
             highlight={lit}
           />
@@ -180,19 +235,60 @@ export function EpicMap({ project, mapping, draft, editor, local }: {
             </ul>
           </section>
 
+          {groups ? (
+            <section className="card pad">
+              <h3>{LENSES.find(l => l.id === lens)?.name}</h3>
+              <ul className="emap-legend">
+                {groups.map(g => <li key={g.value}><span className="emap-swatch" style={{ background: `var(--cat-${g.colour})` }} /> {g.value}</li>)}
+              </ul>
+            </section>
+          ) : (
+            <section className="card pad">
+              <h3>Kinds of work</h3>
+              <ul className="emap-legend">
+                {model.categories.map(c => (
+                  <li key={c.id}><span className="emap-swatch" style={{ background: `var(--cat-${c.id})` }} /> {categoryName(c.id)} <span className="muted">{c.tasks} tasks · {c.epics} epics</span></li>
+                ))}
+              </ul>
+            </section>
+          )}
+
           <section className="card pad">
-            <h3>Kinds of work</h3>
-            <ul className="emap-legend">
-              {model.categories.map(c => (
-                <li key={c.id}><span className="emap-swatch" style={{ background: `var(--cat-${c.id})` }} /> {categoryName(c.id)} <span className="muted">{c.tasks} tasks · {c.epics} epics</span></li>
+            <h3>Quests</h3>
+            <ul className="emap-list">
+              {questList.map(q => (
+                <li key={q.id}>
+                  <span className={`pill ${q.done ? "good" : ""}`}>{q.done ? "Done" : `${q.progress}/${q.goal}`}</span>
+                  <span>{q.name}</span>
+                </li>
               ))}
             </ul>
+            {history && history.quests.length > 0 && (
+              <p className="muted">Finished before: {history.quests.flatMap(r => r.quests.map(q => q.name)).join(", ")}</p>
+            )}
           </section>
+
+          {history && (
+            <Timelapse project={project} mapping={mapping} history={history} current={model}
+              show={m => canvas.current?.update(m, true, lens)} />
+          )}
         </aside>
       </div>
 
       {openItem && <ItemDrawer item={openItem} project={project} mapping={mapping} schedule={schedule} original={original} draft={draft}
         conflicts={findConflicts(schedule, draft)} editor={editor} onClose={() => setOpen(null)} onOpen={setOpen} />}
+
+      {meeting && (
+        <MeetingMode
+          agenda={agenda}
+          tally={{ ...tally, score: sessionDelta }}
+          onClose={() => setMeeting(false)}
+          onFocus={item => canvas.current?.focusMany(item.focus.length ? item.focus : item.suggestion?.items.slice(0, 3) ?? [])}
+          onAccept={accept}
+          reviewHref={reviewHref ?? "#"}
+          readOnly={!editor}
+        />
+      )}
     </div>
   );
 }

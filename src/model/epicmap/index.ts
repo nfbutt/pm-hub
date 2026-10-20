@@ -14,6 +14,7 @@ export interface MapTask {
   ownSim: number; best: { epicKey: string; sim: number } | null;
   /** True when another epic matches clearly better than its own (or it has no epic and one matches). */
   misfit: boolean;
+  priority: string | null; release: string | null;
 }
 
 export interface MapEpic {
@@ -27,7 +28,7 @@ export interface MapEpic {
   /** 0–100, or null for an epic with no tasks to judge. */
   health: number | null;
   flags: string[];
-  priority: string | null; release: string | null;
+  priority: string | null; release: string | null; assignees: string[];
 }
 
 export interface Overlap { a: string; b: string; score: number; shared: string[] }
@@ -126,6 +127,7 @@ export function analyze(p: Project, m: Mapping, opts: MapOptions): EpicMapModel 
     return {
       key: t.key, title: t.title, state: t.state, assignees: t.assignees, epicKey: own,
       mix: mixes[i]!, category: dominant(mixes[i]!).id, ownSim, best, misfit,
+      priority: priorityOf(t, m)?.name ?? null, release: releaseOf(t, m)?.title ?? null,
     };
   });
 
@@ -162,7 +164,7 @@ export function analyze(p: Project, m: Mapping, opts: MapOptions): EpicMapModel 
       key: e.key, title: e.title, state: e.state, taskKeys: mine.map(t => t.key),
       done: mine.length ? mine.filter(t => t.state !== "open").length / mine.length : (e.state === "open" ? 0 : 1),
       mix, category: top.id, purity: top.share, cohesion, coupling, health, flags,
-      priority: priorityOf(e, m)?.name ?? null, release: releaseOf(e, m)?.title ?? null,
+      priority: priorityOf(e, m)?.name ?? null, release: releaseOf(e, m)?.title ?? null, assignees: e.assignees,
     };
   });
 

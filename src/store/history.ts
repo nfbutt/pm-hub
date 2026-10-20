@@ -14,6 +14,12 @@ export interface ChangeRecord {
 
 export interface BaselineMeta { id: string; name: string; savedAt: string; auto: boolean }
 
+/** Quests the team has finished, kept with the rest of the plan history. */
+export interface QuestRecord {
+  version: 1; at: string; author: string | null;
+  quests: { id: string; name: string }[];
+}
+
 export interface HistoryStore {
   config: HistoryConfig;
   listBaselines(): Promise<BaselineMeta[]>;
@@ -21,6 +27,8 @@ export interface HistoryStore {
   saveBaseline(b: Baseline): Promise<void>;
   listChanges(limit?: number): Promise<ChangeRecord[]>;
   saveChange(c: ChangeRecord): Promise<void>;
+  listQuests(): Promise<QuestRecord[]>;
+  saveQuests(q: QuestRecord): Promise<void>;
 }
 
 export const defaultDir = (owner: string, number: number) => `.pm-hub/${owner}-${number}`;
@@ -37,10 +45,10 @@ export const writeHistoryConfig = (o: string, n: number, c: HistoryConfig) => ti
 
 // ---------------------------------------------------------------- local
 
-interface LocalData { baselines: Baseline[]; changes: ChangeRecord[] }
+interface LocalData { baselines: Baseline[]; changes: ChangeRecord[]; quests: QuestRecord[] }
 export function localHistory(owner: string, number: number): HistoryStore {
   const key = `history:${owner}/${number}`;
-  const read = async (): Promise<LocalData> => (await timed(idbGet<LocalData>(key), undefined)) ?? { baselines: [], changes: [] };
+  const read = async (): Promise<LocalData> => (await timed(idbGet<LocalData>(key), undefined)) ?? { baselines: [], changes: [], quests: [] };
   const write = (d: LocalData) => timed(idbSet(key, d), undefined);
   return {
     config: { mode: "local" },
@@ -49,6 +57,8 @@ export function localHistory(owner: string, number: number): HistoryStore {
     saveBaseline: async b => { const d = await read(); d.baselines = [...d.baselines, b].slice(-40); await write(d); },
     listChanges: async (limit = 30) => (await read()).changes.slice(-limit).reverse(),
     saveChange: async c => { const d = await read(); d.changes = [...d.changes, c].slice(-200); await write(d); },
+    listQuests: async () => (await read()).quests.slice(-20).reverse(),
+    saveQuests: async q => { const d = await read(); d.quests = [...d.quests, q].slice(-50); await write(d); },
   };
 }
 
@@ -60,6 +70,7 @@ This folder is written by [pm-hub](https://nfbutt.github.io/pm-hub/) for the pro
 
 - \`baselines/\`: snapshots of the plan (dates, parents, releases, lanes) to compare later plans against.
 - \`changes/\`: one file per apply: what was changed on GitHub, by whom, the result of each change, and any reason given.
+- \`quests/\`: one file per set of goals the team finished on the Epic Map.
 
 Files are only ever added, never edited. Folder: \`${dir}\`.
 `;
@@ -87,6 +98,11 @@ export function githubHistory(client: GitHubClient, repo: string, dir: string): 
       return Promise.all(files.map(f => readJson<ChangeRecord>(client, repo, f.path)));
     },
     saveChange: c => createJson(client, repo, `${dir}/changes/${stamp(c.at)}.json`, c, `pm-hub: applied ${c.steps.filter(s => s.status === "applied").length} change(s)`),
+    listQuests: async () => {
+      const files = (await listDir(client, repo, `${dir}/quests`)).filter(f => f.name.endsWith(".json")).sort((a, b) => b.name.localeCompare(a.name)).slice(0, 20);
+      return Promise.all(files.map(f => readJson<QuestRecord>(client, repo, f.path)));
+    },
+    saveQuests: q => createJson(client, repo, `${dir}/quests/${stamp(q.at)}.json`, q, `pm-hub: finished ${q.quests.map(x => x.name).join(", ")}`),
   };
 }
 
