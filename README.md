@@ -93,6 +93,10 @@ OLLAMA_ORIGINS=https://nfbutt.github.io ollama serve
 
 Then run `ollama pull qwen3` and `ollama pull qwen3-embedding`, and set the address to `http://localhost:11434/v1` in *Settings → Local model*. LM Studio and llama.cpp's server work the same way.
 
+### How long a piece of work takes
+
+The planner asks for three lengths for every piece of work — optimistic, most likely and pessimistic — and averages them the way PERT does. What you see is a range ("3d (2–6)"), never a single committed date, because a model's estimate is optimistic and nobody should plan around a number that was never a promise.
+
 ### Working days
 
 The chart and the plan know which days you can work in. By that is Monday to Friday; set your own in *Settings → Calendar*, along with the days that are off whatever the week says. The days nobody works in are shaded on the chart, and the plan does not count them — so a chain that runs through a weekend is not a chain that takes two extra days.

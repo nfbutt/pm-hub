@@ -57,40 +57,41 @@ Each phase below is small enough to be one PR. The order is by value, not by eff
 
 **Not doing.** Deleting issues. GitHub cannot, and a plan that deletes things is a different product.
 
-### Phase 12: releases without a due date
+### Phase 12: releases without a due date — done
 
 **Why.** A single-select "Release" field has no due date, so the plan cannot be checked against it and the Roadmap draws no release markers. The check works for milestone-based releases and is silent for field-based ones, which is worse than not having it: the plan looks fine because nothing was checked.
 
-**What.**
-- `releaseOf` returns a due date for the field rule when the project has a date field to read it from, or falls back to the end of the release's own work.
-- `src/model/plan/cpm.ts` uses it; the Roadmap draws the markers and the Gantt draws the lines.
+**What was built.**
+- The mapping has a **release due date field**: the date field that says when a release is due. It is detected by name and can be set in *Settings → Grouping*.
+- `releaseOf` returns that date for a field-based release, so the plan engine, the Roadmap's markers and the Gantt's lines all have something to work with.
 - `setRelease` is unchanged: releases still have to exist.
 
 **Done when.** A project with a Release field and a due date field has its plan checked against its releases, and an epic that misses its release is named.
 
 **Not doing.** Creating milestones. The API pm-hub uses cannot create them, so a release the project does not have is a release pm-hub cannot put work into.
 
-### Phase 13: two-stage release grouping
+### Phase 13: two-stage release grouping — done
 
-**Why.** Today the model names the groups itself, which means the same project can be grouped differently on two runs — the "roadmap churn" failure. The safer recipe is two stages: the model labels each piece of work with a small closed theme, and pm-hub clusters on that label deterministically. The phasing is then reproducible and can be re-derived after any edit.
+**Why.** The model used to name the groups itself, which means the same project can be grouped differently on two runs — the "roadmap churn" failure. The safer recipe is two stages: the model labels each piece of work with a small closed theme, and pm-hub clusters on that label deterministically. The phasing is then reproducible and can be re-derived after any edit.
 
-**What.**
-- A theme prompt with a closed label set (the project's own labels and categories), one label per item.
-- `cluster` on (theme, epic), in `src/model/epicmap/cluster.ts` or beside it.
-- The release suggestion then comes from the clusters, not from the model.
+**What was built.**
+- The model labels each epic with a theme from a closed set — the project's own releases — and leaves out anything that belongs to none of them.
+- `groupByTheme` (`src/model/plan/infer.ts`) does the grouping, so the same labels always give the same groups, whatever order they arrive in.
+- The release suggestions then come from those groups, and every check they used to pass still applies: a release that exists, epics that are not already in it, and operations that can be recorded.
 
 **Done when.** The same project asked twice gives the same grouping, and changing one dependency re-derives it rather than inventing a new one.
 
 **Not doing.** Letting the model choose dates. It is optimistic and unbounded, and it is not a commitment.
 
-### Phase 14: effort as a distribution
+### Phase 14: effort as a distribution — done
 
 **Why.** A model's duration estimate is optimistic and unbounded, and it is very sensitive to how the question is phrased. The defensible contract is a distribution, not a number: three points, expected value and spread computed in the browser.
 
-**What.**
-- The model is asked for three points (optimistic, most likely, pessimistic) per epic.
-- `te = (o + 4m + p) / 6` and `σ = (p − o) / 6` are computed client-side, and the spread is carried through the plan like a duration range.
-- The drawer and the Roadmap show a range, never a single committed date.
+**What was built.**
+- The planner asks for three lengths per piece of work: optimistic, most likely and pessimistic.
+- `estimate` (`src/model/plan/draft.ts`) computes the expected length the way PERT does, `(o + 4m + p) / 6`, and the range it could be.
+- The bar is drawn at the expected length, and the draft shows the range beside it: "3d (2–6)".
+- A piece of work with one number still works: the range is the number.
 
 **Done when.** An epic the model has sized shows a range on the map, and the critical chain uses the expected length.
 

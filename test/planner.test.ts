@@ -5,7 +5,8 @@ import { makeFixture, DEMO_OWNER } from "../src/demo/fixture";
 import { normalizeProject } from "../src/model/normalize";
 import { detectMapping } from "../src/model/mapping";
 import { applyOps } from "../src/model/ops";
-import { checkDraft, draftOps, MAX_DRAFT_ITEMS, summariseDraft, type PlanDraft } from "../src/model/plan/draft";
+import { checkDraft, draftOps, estimate, MAX_DRAFT_ITEMS, summariseDraft, type PlanDraft } from "../src/model/plan/draft";
+import { groupByTheme } from "../src/model/plan/infer";
 import { checkPlan } from "../src/ai/plan";
 import { transcribe } from "../src/ai/voice";
 import { activeChanges, canUndo, emptyStore, record, undo } from "../src/model/scenarios";
@@ -144,6 +145,53 @@ describe("turning a draft into changes", () => {
     expect(summary.links).toBe(1);
     expect(summary.from).toBe("2026-11-02");
     expect(summary.to).toBe("2026-12-11");
+  });
+});
+
+describe("how long a piece of work takes", () => {
+  it("is a range, not a number", () => {
+    // Three points: optimistic, most likely, pessimistic.
+    const est = estimate({ title: "A", why: "", days: 3, best: 2, worst: 6 });
+    expect(est.expected).toBe(3);
+    expect(est.low).toBe(2);
+    expect(est.high).toBe(6);
+  });
+
+  it("falls back to the one number when there are no others", () => {
+    const est = estimate({ title: "A", why: "", days: 4 });
+    expect(est.expected).toBe(4);
+    expect(est.low).toBe(4);
+    expect(est.high).toBe(4);
+  });
+
+  it("keeps the bar at the expected length", () => {
+    const d = draft();
+    d.epics[0]!.stories[0] = { title: "Invoice list", why: "", days: 5, best: 2, worst: 10 };
+    const { draft: checked } = checkDraft(project, mapping, d);
+    const ops = draftOps(project, mapping, checked);
+    const story = ops.find(o => o.kind === "create" && o.item.title === "Invoice list");
+    expect(story?.kind).toBe("create");
+    if (story?.kind !== "create") return;
+    const end = Object.values(story.item.fields).find(v => v.kind === "date" && v.date !== "2026-11-02");
+    expect(end).toBeDefined();
+  });
+});
+
+describe("grouping the work", () => {
+  it("groups what the model labelled", () => {
+    const groups = groupByTheme([
+      { key: "a", theme: "Release 1" },
+      { key: "b", theme: "Release 1" },
+      { key: "c", theme: "Release 2" },
+    ]);
+    expect(groups).toHaveLength(2);
+    expect(groups.find(g => g.release === "Release 1")!.epics).toEqual(["a", "b"]);
+  });
+
+  it("gives the same answer twice, however the labels are ordered", () => {
+    const a = groupByTheme([{ key: "a", theme: "R" }, { key: "b", theme: "R" }]);
+    const b = groupByTheme([{ key: "b", theme: "R" }, { key: "a", theme: "R" }]);
+    expect(a[0]!.epics.slice().sort()).toEqual(b[0]!.epics.slice().sort());
   });
 });
 

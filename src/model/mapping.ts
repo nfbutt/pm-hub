@@ -19,6 +19,8 @@ export interface Mapping {
   release: ReleaseRule;
   statusField: string | null;
   priority: { kind: "none" } | { kind: "field"; field: string } | { kind: "labelPrefix"; prefix: string };
+  /** The date field that says when a release is due, when the project has one. */
+  releaseDueField: string | null;
   /** Which days of the week are working days: 0 is Sunday. */
   workingDays: number[];
   /** The days that are not working days, whatever the week says. */
@@ -89,6 +91,7 @@ export function detectMapping(p: Project): Mapping {
     epic: { subIssues: true, issueTypes, label: typeLike },
     lane, release, statusField, priority,
     workingDays: [1, 2, 3, 4, 5], holidays: [],
+    releaseDueField: dates.find(f => f.name !== startField && f.name !== endField && /release|ship|go.?live|launch/i.test(f.name))?.name ?? null,
   };
 }
 
@@ -123,9 +126,17 @@ export function releaseOf(i: Item, m: Mapping): ReleaseRef | null {
   }
   if (m.release.kind === "field") {
     const v = i.fields[m.release.field];
-    if (v?.kind === "single") return { id: `f:${v.optionId}`, title: v.name, due: null, start: null };
+    // A project that says when a release is due can be checked against it.
+    const due = m.releaseDueField ? dateFieldValue(i, m.releaseDueField) : null;
+    if (v?.kind === "single") return { id: `f:${v.optionId}`, title: v.name, due, start: null };
   }
   return null;
+}
+
+/** The value of a date field, as a plain day. */
+export function dateFieldValue(i: Item, field: string): string | null {
+  const v = i.fields[field];
+  return v?.kind === "date" ? v.date.slice(0, 10) : null;
 }
 
 export function statusOf(i: Item, m: Mapping): string | null {

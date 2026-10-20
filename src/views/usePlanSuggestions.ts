@@ -5,13 +5,13 @@ import { useEffect, useMemo, useState } from "react";
 import {
   chatJson, checkLinks as checkLinkAnswer, checkReleases as checkReleaseAnswer,
   promptDependencies, promptReleases, SYSTEM_DEPENDENCIES, SYSTEM_RELEASES,
-  type LocalSettings, type ProposedLink, type ProposedRelease,
+  type LocalSettings, type ProposedLink,
 } from "../ai/local";
 import { analyze } from "../model/epicmap";
 import type { Mapping } from "../model/mapping";
 import type { Item, Project } from "../model/normalize";
 import type { Plan } from "../model/plan/cpm";
-import { checkLinks, checkReleases, type CandidatePair, type LinkSuggestion, type ReleaseSuggestion } from "../model/plan/infer";
+import { checkLinks, checkReleases, groupByTheme, type CandidatePair, type LinkSuggestion, type ReleaseSuggestion } from "../model/plan/infer";
 import { readChat, writeChat } from "../store/epicmap";
 
 export type PlanStatus = "off" | "working" | "on" | "unreachable";
@@ -109,9 +109,12 @@ export function usePlanSuggestions(project: Project, mapping: Mapping, plan: Pla
       const checkedLinks = linkAnswer ? checkLinks(project, mapping, plan, linkAnswer.links) : { accepted: [], dropped: [] };
       if (linkAnswer && !cachedLinks) { got++; void writeChat(linkPrompt, linkAnswer); }
 
-      const cachedReleases = await readChat<{ releases: ProposedRelease[] }>(releasePrompt);
+      const cachedReleases = await readChat<{ themes: { key: string; theme: string }[] }>(releasePrompt);
+      // The model labels each piece of work; pm-hub does the grouping. Asking a model to
+      // group things itself means the same project comes out grouped differently every
+      // time, and a roadmap that churns is worse than no roadmap.
       const releaseAnswer = cachedReleases ?? await chatJson(settings, SYSTEM_RELEASES, releasePrompt, checkReleaseAnswer);
-      const checkedReleases = releaseAnswer ? checkReleases(project, mapping, releaseAnswer.releases) : { accepted: [], dropped: [] };
+      const checkedReleases = releaseAnswer ? checkReleases(project, mapping, groupByTheme(releaseAnswer.themes)) : { accepted: [], dropped: [] };
       if (releaseAnswer && !cachedReleases) { got++; void writeChat(releasePrompt, releaseAnswer); }
 
       if (dead) return;
