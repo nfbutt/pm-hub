@@ -5,6 +5,7 @@ import {
   DEFAULT_CONTEXT, DEFAULT_MAX_TOKENS, DEFAULT_TIMEOUT, DEFAULT_VOICE_BASE, defaultLocal, forgetModels, listModels, testModel, type ModelCheck,
 } from "../ai/local";
 import { useState } from "react";
+import { keyIsRemembered, readApiKey, writeApiKey } from "../store/key";
 import type { ReactNode } from "react";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -26,6 +27,8 @@ export function Settings({ project, mapping, setMapping, resetMapping, prefs, se
   const holidays = mapping.holidays ?? [];
   const local = prefs.local ?? defaultLocal;
   const setLocal = (patch: Partial<typeof local>) => setPrefs({ ...prefs, local: { ...local, ...patch } });
+  const [key, setKey] = useState(() => readApiKey() ?? "");
+  const [remember, setRemember] = useState(() => keyIsRemembered());
   const [probe, setProbe] = useState<ModelCheck | null>(null);
   const [probing, setProbing] = useState(false);
   // The models the server actually has. The names are not always what you would guess,
@@ -151,9 +154,8 @@ export function Settings({ project, mapping, setMapping, resetMapping, prefs, se
       <section className="card pad settings">
         <h2>Local model</h2>
         <p className="muted" style={{ maxWidth: "70ch" }}>
-          A model running on this computer can help the Epic Map compare work by meaning, explain what it sees, and
-          draft a plan. Only issue titles and bodies are sent, and only to the address below, which has to be on this
-          computer. Your GitHub token is never part of a request.
+          A model can help the Epic Map compare work by meaning, explain what it sees, and draft a plan. Only issue
+          titles and bodies are sent, and your GitHub token is never part of a request.
         </p>
         <p className="muted" style={{ maxWidth: "70ch" }}>
           <b>One thing worth knowing:</b> a thinking model (qwen3 and its family) can spend minutes filling its context
@@ -164,12 +166,44 @@ export function Settings({ project, mapping, setMapping, resetMapping, prefs, se
           <input type="checkbox" checked={local.enabled} onChange={e => setLocal({ enabled: e.target.checked })} />
           Use a local model for the Epic Map
         </label>
+        <div className="seg" role="group" aria-label="Where the model runs" style={{ justifySelf: "start" }}>
+          <button className={local.allowRemote ? "" : "on"} onClick={() => { forgetModels(); setLocal({ base: "http://localhost:11434/v1", allowRemote: false }); }}>
+            On this computer
+          </button>
+          <button className={local.allowRemote ? "on" : ""} onClick={() => { forgetModels(); setLocal({ base: "https://openrouter.ai/api/v1", allowRemote: false, chatModel: "qwen/qwen3.5-flash-02-23" }); }}>
+            OpenRouter
+          </button>
+        </div>
         <div className="setting">
           <label htmlFor="ai-base">Address</label>
           <input id="ai-base" className="input" value={local.base} onChange={e => { forgetModels(); setLocal({ base: e.target.value }); }}
             placeholder="http://localhost:11434/v1" />
           <span className="muted">An OpenAI-compatible endpoint, e.g. Ollama or LM Studio.</span>
         </div>
+        {local.allowRemote && (
+          <div className="setting">
+            <label htmlFor="ai-key">API key</label>
+            <input id="ai-key" className="input" type="password" value={key} placeholder="sk-or-…"
+              onChange={e => setKey(e.target.value)} />
+            <label className="check-row">
+              <input type="checkbox" checked={remember} onChange={e => { setRemember(e.target.checked); writeApiKey(key, e.target.checked); }} />
+              Remember on this device
+            </label>
+            <span className="muted">Kept out of your preferences and out of the shared plan history. Not remembered means this tab only.</span>
+          </div>
+        )}
+        {!local.allowRemote ? (
+          <p className="muted" style={{ maxWidth: "70ch" }}>
+            Everything stays on this computer: pm-hub never sends anything to a hosted service.
+          </p>
+        ) : (
+          <div className="callout warn" style={{ maxWidth: "70ch" }}>
+            <b>This model runs somewhere else.</b> The text of your issues — titles and bodies — is sent to
+            {" "}<code>{local.base.replace(/^https?:\/\//, "").replace(/\/.*$/, "")}</code> to be read, and so are the
+            questions you ask it. Nothing else goes: never your GitHub token, never a repository, never the history.
+            {local.embedModel && <><br />Note that this service has no embedding model, so the map will compare by words rather than by meaning.</>}
+          </div>
+        )}
         <div className="setting">
           <label htmlFor="ai-chat">Chat model</label>
           <input id="ai-chat" className="input" value={local.chatModel} onChange={e => setLocal({ chatModel: e.target.value })} />
