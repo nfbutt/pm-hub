@@ -79,6 +79,22 @@ Epics and stories change all the time: they get re-dated, re-scoped, split, move
 
 The app follows your system by default. The switch in the top bar sets it to light, dark, or back to the system, and the choice is remembered. The charts read their colours out of the page, so they change with it.
 
+### Talking to a local model
+
+A model on your own machine can be a *thinking* model (qwen3 and its family) or one that answers straight away (qwen2.5). The difference is enormous for the work pm-hub asks of it: on an M4 Pro, **qwen3:8b took 4 minutes 40 seconds** on the planner's prompt and never got to the answer — it spent its whole context thinking — while **qwen2.5:7b answered the same prompt in 6 seconds**.
+
+So pm-hub:
+
+- **gives the model room** — a token budget and a context size, both adjustable, because Ollama's own default of 4096 is not much;
+- **waits longer** — three minutes by default, not the twenty seconds a hosted API needs;
+- **shows the clock**, so a slow model never looks like a hung app;
+- **says what is wrong when the model only thinks** — "The model spent its whole budget thinking and never answered" is a different problem from "the model is not there";
+- **tells you how long your model took** when you test it.
+
+### The microphone
+
+The microphone needs a **speech server** — a different program from the chat model, because Ollama does not transcribe. pm-hub checks for one *before* it starts recording, and tells you the command to start it if there is not one.
+
 ### Is the AI working?
 
 There is a pill in the top bar that says so: **AI off**, **AI ready**, or **AI not answering**. Click it to check the connection — it tests the chat model and the embedding model one at a time, and tells you which half is missing, the exact command to fix it (`ollama pull qwen3-embedding`), and **the names the server actually has** so the fix is a name to type rather than a guess. The answer is remembered, so the app does not ask the model again on every page.

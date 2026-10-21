@@ -5,9 +5,9 @@
 //   3. Tidy an epic.        — a model reads an epic's stories and says what is missing.
 //
 // Everything ends in the review screen, so nothing reaches GitHub until you say so.
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { checkAmend, checkEpic, checkPlan, promptAmend, promptEpic, promptPlan, SYSTEM_AMEND, SYSTEM_EPIC, SYSTEM_PLAN, type PlanContext } from "../ai/plan";
-import { chatJson, defaultLocal, type LocalSettings } from "../ai/local";
+import { chatJson, defaultLocal, ThinkingModelError, type LocalSettings } from "../ai/local";
 import { isEpic, releaseOf, type Mapping } from "../model/mapping";
 import type { Project } from "../model/normalize";
 import { checkDraft, draftOps, estimate, summariseDraft, type PlanDraft } from "../model/plan/draft";
@@ -18,6 +18,9 @@ import type { Editor } from "./useChangeSet";
 import { VoiceInput } from "./voice/VoiceInput";
 
 type Mode = "match" | "write" | "amend";
+
+/** Seconds, as a clock. */
+const clock = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
 export function Planner({ project, mapping, editor, local }: {
   project: Project;
@@ -32,6 +35,7 @@ export function Planner({ project, mapping, editor, local }: {
   const [draft, setDraft] = useState<PlanDraft | null>(null);
   const [problems, setProblems] = useState<string[]>([]);
   const [working, setWorking] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [kept, setKept] = useState<Set<string>>(new Set());
   const [msg, setMsg] = useState<string | null>(null);
@@ -41,11 +45,19 @@ export function Planner({ project, mapping, editor, local }: {
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const settings = local ?? defaultLocal;
 
+  // A local model can take minutes, especially a thinking one. Show the clock so it does
+  // not look like the app has hung.
+  useEffect(() => {
+    if (!working) { setElapsed(0); return; }
+    const t = setInterval(() => setElapsed(e => e + 1), 1000);
+    return () => clearInterval(t);
+  }, [working]);
+
   const context = useMemo<PlanContext>(() => ({
-    epics: project.items.filter(i => isEpic(i, mapping)).slice(0, 40).map(i => i.title),
-    releases: [...new Set(project.items.map(i => releaseOf(i, mapping)?.title).filter((r): r is string => !!r))].slice(0, 20),
-    labels: [...new Set(project.items.flatMap(i => i.labels))].slice(0, 25),
-    people: [...new Set(project.items.flatMap(i => i.assignees))].slice(0, 25),
+    epics: project.items.filter(i => isEpic(i, mapping)).slice(0, 15).map(i => i.title),
+    releases: [...new Set(project.items.map(i => releaseOf(i, mapping)?.title).filter((r): r is string => !!r))].slice(0, 10),
+    labels: [...new Set(project.items.flatMap(i => i.labels))].slice(0, 12),
+    people: [...new Set(project.items.flatMap(i => i.assignees))].slice(0, 12),
     startField: mapping.startField, endField: mapping.endField,
     today: new Date().toISOString().slice(0, 10),
   }), [project, mapping]);
@@ -65,15 +77,24 @@ export function Planner({ project, mapping, editor, local }: {
     setWorking(true); setError(null); setMsg(null);
     // One epic and a whole plan are the same shape from here on.
     let asDraft: PlanDraft | null = null;
-    if (shape === "epic") {
-      const answer = await chatJson(settings, SYSTEM_EPIC, promptEpic(description, context.releases, context.labels, context.today), checkEpic);
-      if (answer) asDraft = { name: answer.title, summary: answer.summary, epics: [{ ...answer, why: answer.summary, after: [] }] };
-    } else {
-      const answer = await chatJson(settings, SYSTEM_PLAN, promptPlan(context, description), checkPlan);
-      if (answer) asDraft = answer;
+    try {
+      if (shape === "epic") {
+        const answer = await chatJson(settings, SYSTEM_EPIC, promptEpic(description, context.releases, context.labels, context.today), checkEpic);
+        if (answer) asDraft = { name: answer.title, summary: answer.summary, epics: [{ ...answer, why: answer.summary, after: [] }] };
+      } else {
+        const answer = await chatJson(settings, SYSTEM_PLAN, promptPlan(context, description), checkPlan);
+        if (answer) asDraft = answer;
+      }
+    } catch (e) {
+      if (e instanceof ThinkingModelError) { setError(e.message); return; }
+      setError("The model did not answer with a plan. Try again, or write the plan yourself.");
+      return;
     }
     setWorking(false);
-    if (!asDraft) { setError("The model did not answer with a plan. Try again, or write the plan yourself."); return; }
+    if (!asDraft) {
+      setError("The model did not answer with a plan. A model that answers straight away — qwen2.5, for one — is usually better for this than a thinking one, which can take minutes. Try again, or write the plan yourself.");
+      return;
+    }
     const checked = checkDraft(project, mapping, asDraft);
     setDraft(checked.draft);
     setProblems(checked.problems);
@@ -84,11 +105,19 @@ export function Planner({ project, mapping, editor, local }: {
     if (!settings.enabled) { setError("Turn on a local model in Settings to have it read the epic."); return; }
     if (!amendEpic) { setError("Choose an epic first."); return; }
     setWorking(true); setError(null); setMsg(null);
-    const answer = await chatJson(settings, SYSTEM_AMEND,
-      promptAmend({ title: amendEpic.title, body: (amendEpic.body ?? "").slice(0, 300) }, epicStories(project, amendEpic), context.releases),
-      checkAmend);
+    type AmendAnswer = { add: { title: string; why: string; days: number }[]; rename: { key: string; from: string; to: string; why: string }[]; overlap: { keys: string[]; titles: string[]; why: string }[] };
+    let answer: AmendAnswer | null = null;
+    try {
+      answer = await chatJson<AmendAnswer>(settings, SYSTEM_AMEND,
+        promptAmend({ title: amendEpic.title, body: (amendEpic.body ?? "").slice(0, 300) }, epicStories(project, amendEpic), context.releases),
+        checkAmend);
+    } catch (e) {
+      setWorking(false);
+      setError(e instanceof ThinkingModelError ? e.message : "The model did not answer. Try again, or make the changes yourself.");
+      return;
+    }
     setWorking(false);
-    if (!answer) { setError("The model did not answer. Try again, or make the changes yourself."); return; }
+    if (!answer) { setError("The model did not answer. A model that answers straight away is usually better for this than a thinking one. Try again, or make the changes yourself."); return; }
     // The story keys have to be ones this epic really has.
     const keys = new Set(epicStories(project, amendEpic).map(s => s.key));
     const checked: Amendments = {
@@ -168,10 +197,20 @@ export function Planner({ project, mapping, editor, local }: {
             </div>
             <div className="drow">
               <button className="btn primary" onClick={() => void amendIt()} disabled={working || !amendEpic || !settings.enabled}>
-                {working ? "Reading it…" : "What should change?"}
+                {working ? `Reading it… ${clock(elapsed)}` : "What should change?"}
               </button>
+              {working && <span className="muted" style={{ fontSize: 12 }}>The model is thinking. A local one can take a minute or two.</span>}
               {!settings.enabled && <span className="muted" style={{ fontSize: 12 }}>Turn on a local model in Settings first.</span>}
             </div>
+            {amendEpic && !amendments && (
+              <div>
+                <h4 style={{ fontSize: 12, marginBottom: 4 }}>Its stories</h4>
+                <ul className="emap-list">
+                  {epicStories(project, amendEpic).map(s => <li key={s.key}>{s.title}</li>)}
+                </ul>
+                {!epicStories(project, amendEpic).length && <p className="muted">This epic has no stories yet.</p>}
+              </div>
+            )}
             {amendments && amendEpic && (
               <div style={{ display: "grid", gap: 8 }}>
                 {amendments.add.length > 0 && (
@@ -267,8 +306,9 @@ export function Planner({ project, mapping, editor, local }: {
             ) : (
               <div className="drow">
                 <button className="btn primary" onClick={() => void draftIt()} disabled={working || !settings.enabled}>
-                  {working ? "Writing…" : "Write it"}
+                  {working ? `Writing… ${clock(elapsed)}` : "Write it"}
                 </button>
+                {working && <span className="muted" style={{ fontSize: 12 }}>The model is thinking. A local one can take a minute or two.</span>}
                 {!settings.enabled && <span className="muted" style={{ fontSize: 12 }}>Turn on a local model in Settings first.</span>}
               </div>
             )}

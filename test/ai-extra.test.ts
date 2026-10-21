@@ -7,7 +7,8 @@ import { detectMapping } from "../src/model/mapping";
 import { applyOps } from "../src/model/ops";
 import { newItem } from "../src/model/edits";
 import { checkDraft, draftOps } from "../src/model/plan/draft";
-import { listModels, resolveModel, testModel, type LocalSettings } from "../src/ai/local";
+import { chatJson, listModels, resolveModel, testModel, ThinkingModelError, type LocalSettings } from "../src/ai/local";
+import { testSpeech } from "../src/ai/voice";
 import { checkEpic, promptEpic } from "../src/ai/plan";
 
 const f = makeFixture("2026-10-19");
@@ -134,6 +135,69 @@ describe("checking the model", () => {
     const mock = vi.fn();
     vi.stubGlobal("fetch", mock);
     expect(await listModels({ ...settings, base: "https://api.openai.com/v1" })).toBeNull();
+    expect(mock).not.toHaveBeenCalled();
+  });
+});
+
+describe("a model that only thinks", () => {
+  const settings: LocalSettings = { enabled: true, base: "http://localhost:11434/v1", chatModel: "qwen3", embedModel: "qwen3-embedding:0.6b" };
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("is reported as such, not as a model that is not there", async () => {
+    // qwen3 spends its budget thinking and never gets to the answer. That is a
+    // different problem from a server that is down, and the message says so.
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true, status: 200,
+      json: async () => ({ choices: [{ message: { content: "", reasoning: "Let me think about this for a while" } }] }),
+    })));
+    const any = (_v: unknown): _v is unknown => true;
+    await expect(chatJson(settings, "s", "u", any)).rejects.toThrow(ThinkingModelError);
+  });
+
+  it("is not an error when the model answers", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true, status: 200,
+      json: async () => ({ choices: [{ message: { content: "{\"ok\":true}", reasoning: "" } }] }),
+    })));
+    const answer = await chatJson(settings, "s", "u", (v): v is { ok: boolean } => typeof v === "object" && v !== null);
+    expect(answer).toEqual({ ok: true });
+  });
+
+  it("asks for room to finish, and for a bigger context", async () => {
+    const mock = vi.fn(async (_url: string, _init?: { body?: string }) => ({
+      ok: true, status: 200,
+      json: async () => ({ choices: [{ message: { content: "{}", reasoning: "" } }] }),
+    }));
+    vi.stubGlobal("fetch", mock);
+    const any = (_v: unknown): _v is unknown => true;
+    await chatJson(settings, "s", "u", any).catch(() => undefined);
+    const body = JSON.parse(String(mock.mock.calls[0]![1]?.body ?? "{}"));
+    expect(body.max_tokens).toBeGreaterThan(1000);
+    expect(body.options.num_ctx).toBeGreaterThan(4096);
+  });
+});
+
+describe("the microphone needs a speech server", () => {
+  const settings: LocalSettings = { enabled: true, base: "http://localhost:11434/v1", chatModel: "qwen3", embedModel: "qwen3-embedding:0.6b", voiceBase: "http://localhost:8000/v1" };
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("says so, and says what to run", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("no"); }));
+    const check = await testSpeech(settings);
+    expect(check.ok).toBe(false);
+    expect(check.message).toContain("localhost:8000");
+    expect(check.fix).toBeTruthy();
+  });
+
+  it("is happy when there is one", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ data: [] }) })));
+    expect((await testSpeech(settings)).ok).toBe(true);
+  });
+
+  it("will not ask a server that is not on this computer", async () => {
+    const mock = vi.fn();
+    vi.stubGlobal("fetch", mock);
+    expect((await testSpeech({ ...settings, voiceBase: "https://speech.example.com/v1" })).ok).toBe(false);
     expect(mock).not.toHaveBeenCalled();
   });
 });

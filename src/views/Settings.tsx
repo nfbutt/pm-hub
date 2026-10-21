@@ -1,7 +1,9 @@
 import { labelPrefixes, type LaneRule, type Mapping, type ReleaseRule } from "../model/mapping";
 import type { Project } from "../model/normalize";
 import type { Prefs } from "../store/cache";
-import { DEFAULT_VOICE_BASE, defaultLocal, forgetModels, listModels, testModel, type ModelCheck } from "../ai/local";
+import {
+  DEFAULT_CONTEXT, DEFAULT_MAX_TOKENS, DEFAULT_TIMEOUT, DEFAULT_VOICE_BASE, defaultLocal, forgetModels, listModels, testModel, type ModelCheck,
+} from "../ai/local";
 import { useState } from "react";
 import type { ReactNode } from "react";
 
@@ -149,9 +151,14 @@ export function Settings({ project, mapping, setMapping, resetMapping, prefs, se
       <section className="card pad settings">
         <h2>Local model</h2>
         <p className="muted" style={{ maxWidth: "70ch" }}>
-          A model running on this computer can help the Epic Map compare work by meaning and explain what it sees.
-          Only issue titles and bodies are sent, and only to the address below, which has to be on this computer.
-          Your GitHub token is never part of a request.
+          A model running on this computer can help the Epic Map compare work by meaning, explain what it sees, and
+          draft a plan. Only issue titles and bodies are sent, and only to the address below, which has to be on this
+          computer. Your GitHub token is never part of a request.
+        </p>
+        <p className="muted" style={{ maxWidth: "70ch" }}>
+          <b>One thing worth knowing:</b> a thinking model (qwen3 and its family) can spend minutes filling its context
+          before it answers, and a plan is exactly the kind of thing it overthinks. A model that answers straight away —
+          qwen2.5, for one — is usually the better choice here, and the test button below will tell you how long yours took.
         </p>
         <label className="check-row">
           <input type="checkbox" checked={local.enabled} onChange={e => setLocal({ enabled: e.target.checked })} />
@@ -181,6 +188,24 @@ export function Settings({ project, mapping, setMapping, resetMapping, prefs, se
             </span>
           )}
           {installed && !installed.length && <span className="muted" style={{ fontSize: 12 }}>Nothing answered on that address.</span>}
+        </div>
+        <div className="setting">
+          <label htmlFor="ai-budget">How many tokens the model may use</label>
+          <input id="ai-budget" className="input" type="number" min={256} max={32000} step={256} value={local.maxTokens ?? DEFAULT_MAX_TOKENS}
+            onChange={e => setLocal({ maxTokens: Math.max(256, Math.min(32000, Number(e.target.value) || DEFAULT_MAX_TOKENS)) })} />
+          <span className="muted">A thinking model (qwen3 and its family) can spend the whole budget thinking and never answer. Give it more, or use a model that answers straight away.</span>
+        </div>
+        <div className="setting">
+          <label htmlFor="ai-context">How much context the model gets</label>
+          <input id="ai-context" className="input" type="number" min={2048} max={131072} step={2048} value={local.contextTokens ?? DEFAULT_CONTEXT}
+            onChange={e => setLocal({ contextTokens: Math.max(2048, Math.min(131072, Number(e.target.value) || DEFAULT_CONTEXT)) })} />
+          <span className="muted">Ollama's own default is 4096, which is not much room for a plan and the thinking that goes with it.</span>
+        </div>
+        <div className="setting">
+          <label htmlFor="ai-timeout">How long to wait for the model</label>
+          <input id="ai-timeout" className="input" type="number" min={5} max={900} value={local.timeoutSeconds ?? DEFAULT_TIMEOUT}
+            onChange={e => setLocal({ timeoutSeconds: Math.max(5, Math.min(900, Number(e.target.value) || DEFAULT_TIMEOUT)) })} />
+          <span className="muted">Seconds. A model on this computer can take minutes: a thinking model fills its context before it answers.</span>
         </div>
         <div className="setting">
           <label htmlFor="ai-embed">Embedding model</label>
