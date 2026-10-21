@@ -333,7 +333,7 @@ export async function execute(client: GitHubClient, base: Project, steps: Step[]
       const meta = r.repo(op.item.repo);
       const labelIds = op.item.labels.map(l => meta.labels[l]).filter(Boolean);
       const parentIssueId = op.item.parentKey ? r.contentId(op.item.parentKey) : null;
-      const createCall = call(CREATE_ISSUE, { repositoryId: meta.id, title: op.item.title, labelIds, parentIssueId });
+      const createCall = call(CREATE_ISSUE, { repositoryId: meta.id, title: op.item.title, body: op.item.body ?? null, labelIds, parentIssueId });
       log.push(createCall);
       if (opts.dryRun) { created.set(op.key, { contentId: `<new ${op.item.title}>`, itemId: `<new item ${op.item.title}>`, number: 0, url: "", repo: op.item.repo, title: op.item.title }); update(s, { status: "applied", message: "Dry run" }); continue; }
       const res = await client.mutate<{ createIssue: { issue: { id: string; number: number; url: string } } }>(createCall.doc, createCall.vars);

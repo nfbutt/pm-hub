@@ -148,7 +148,7 @@ export function addBlocker(p: Project, item: Item, blockerKey: string): Op[] {
 export const removeBlocker = (item: Item, blockerKey: string): Op[] => (item.blockedBy.some(b => b.key === blockerKey) ? [{ kind: "removeBlockedBy", key: item.key, blocker: blockerKey }] : []);
 
 /** A new issue in the same repo as its parent (or `repo`), with the parent's lane. */
-export function newItem(p: Project, m: Mapping, title: string, opts: { parentKey?: string | null; repo?: string | null; epic?: boolean }): Op[] {
+export function newItem(p: Project, m: Mapping, title: string, opts: { parentKey?: string | null; repo?: string | null; epic?: boolean; body?: string }): Op[] {
   const parent = opts.parentKey ? byKeyOf(p).get(opts.parentKey) : undefined;
   const repo = opts.repo ?? parent?.repo ?? p.items.find(i => i.repo)?.repo ?? null;
   const labels: string[] = [];
@@ -157,7 +157,7 @@ export function newItem(p: Project, m: Mapping, title: string, opts: { parentKey
   const fields: Record<string, FieldValue> = {};
   if (parent && m.lane.kind === "labelPrefix") { const prefix = m.lane.prefix; const l = parent.labels.find(x => splitPrefixed(x)?.[0] === prefix); if (l) labels.push(l); }
   if (parent && m.lane.kind === "field" && parent.fields[m.lane.field]) fields[m.lane.field] = parent.fields[m.lane.field]!;
-  return [{ kind: "create", key: newKey(), item: { title: title.trim() || "Untitled", repo, parentKey: parent?.key ?? null, labels, fields } }];
+  return [{ kind: "create", key: newKey(), item: { title: title.trim() || "Untitled", ...(opts.body ? { body: opts.body } : {}), repo, parentKey: parent?.key ?? null, labels, fields } }];
 }
 
 /** Splits an item: a new sibling (or child of the same epic) takes the chosen sub-issues. */

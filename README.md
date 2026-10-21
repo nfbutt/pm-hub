@@ -24,7 +24,7 @@ Pick one of your GitHub Projects. pm-hub reads its items, field values, mileston
 | Dependencies | Graph of blocked-by and parent links, critical path, cycles |
 | Epic Map | Epics as bubbles of tasks: overlaps, misplaced tasks, kinds of work with no epic, a structure score; drag tasks between epics; a deck of suggestions you can accept or turn down; meeting mode, a timelapse of the plan and goals to work towards |
 | Roadmap | Every epic on one timeline with the dependencies drawn between them: the chain that decides when the plan ends, how much slack each epic has, and what is broken about the plan as it stands |
-| Planner | Describe what you want to build and a model on your computer drafts the plan — epics, stories, dates, a release, what has to happen first. You review it, then it becomes one change |
+| Planner | Describe what you want to build and a model on your computer drafts it — one epic with a description and its subtasks, or a whole plan with epics, stories, dates, a release and what has to happen first. You review it, then it becomes one change |
 | Compare | Two epics side by side: what each covers, what they have in common, what only one has. Drag a story from one to the other to move it |
 | Settings | Change how dates, epics, swimlanes, releases and priority are read; fiscal-year quarters |
 | Review | Every pending change with before and after, checked against GitHub, then applied |
@@ -74,6 +74,10 @@ Epics and stories change all the time: they get re-dated, re-scoped, split, move
 - Project data is cached in your browser's IndexedDB so the next visit is instant. There is no server, no database and no analytics.
 - pm-hub writes to GitHub **only** when you press Apply on the review screen, or save history to a repo you chose. Every project and issue write lives in `src/github/mutations.ts` and is sent only by `src/github/apply.ts`; history files are written only by `src/github/contents.ts`, through the contents API. `test/write-guard.test.ts` enforces all three.
 - Loading a project costs about 35 GraphQL points per 100 items, out of GitHub's 5,000 per hour. A warning appears when fewer than 500 remain.
+
+### Is the AI working?
+
+There is a pill in the top bar that says so: **AI off**, **AI ready**, or **AI not answering**. Click it to check the connection — it tests the chat model and the embedding model one at a time, and tells you which half is missing and the exact command to fix it (`ollama pull qwen3-embedding`). The answer is remembered, so the app does not ask the model again on every page.
 
 ### A model on your own computer (optional)
 

@@ -136,3 +136,22 @@
 .cmp-col.drop { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
 .cmp-grip { color: var(--muted); cursor: grab; font-size: 11px; }
 .cmp-col .emap-list li { align-items: baseline; }
+
+/* is the AI there? */
+.ai-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 4px 10px; }
+.ai-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex: none; }
+.ai-pill.on .ai-dot { background: var(--good); box-shadow: 0 0 0 3px color-mix(in srgb, var(--good) 20%, transparent); }
+.ai-pill.bad .ai-dot { background: var(--bad); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bad) 20%, transparent); }
+.ai-pill.unknown .ai-dot { background: var(--warn); }
+.ai-panel {
+  position: absolute; right: 0; top: calc(100% + 8px); z-index: 30; width: min(340px, calc(100vw - 32px));
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 16px; display: grid; gap: 10px; text-align: left;
+}
+.ai-panel h3 { font-size: 13px; font-weight: 800; }
+.ai-panel .good { color: var(--good); }
+.ai-panel .bad { color: var(--bad); }
+.ai-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+/* the summary an epic gets from a model */
+.plan-summary { font-size: 12.5px; color: var(--fg); border-left: 2px solid var(--accent-soft); padding-left: 8px; margin: 2px 0; }

@@ -24,6 +24,7 @@ import { Roadmap } from "../src/views/Roadmap";
 import { Review } from "../src/views/Review";
 import { Planner } from "../src/views/Planner";
 import { Compare } from "../src/views/Compare";
+import { AiStatus } from "../src/views/ai/AiStatus";
 import { BurnUp } from "../src/views/BurnUp";
 import { Confidence } from "../src/views/Confidence";
 import { Progress } from "../src/views/Progress";
@@ -77,10 +78,18 @@ describe("views render with the demo project", () => {
     expect(html).toContain("Choose two epics to compare");
   });
 
+  it("The AI pill says whether the model is there", () => {
+    const html = renderToString(<AiStatus settings={{ enabled: false, base: "", chatModel: "", embedModel: "" }} settingsHref="#/settings" />);
+    expect(html).toContain("AI off");
+    expect(html).toContain("ai-pill");
+  });
+
   it("Planner asks what you are building and says what to do next", () => {
     const html = renderToString(<Planner project={project} mapping={mapping} />);
     expect(html).toContain("Planner");
-    expect(html).toContain("What are you building?");
+    expect(html).toContain("What is this epic for?");
+    expect(html).toContain("One epic");
+    expect(html).toContain("A whole plan");
     expect(html).toContain("Write a plan");
     expect(html).toContain("Turn on a local model");
   });

@@ -1,7 +1,7 @@
 import { labelPrefixes, type LaneRule, type Mapping, type ReleaseRule } from "../model/mapping";
 import type { Project } from "../model/normalize";
 import type { Prefs } from "../store/cache";
-import { DEFAULT_VOICE_BASE, defaultLocal, testConnection } from "../ai/local";
+import { DEFAULT_VOICE_BASE, defaultLocal, testModel, type ModelCheck } from "../ai/local";
 import { useState } from "react";
 import type { ReactNode } from "react";
 
@@ -24,12 +24,12 @@ export function Settings({ project, mapping, setMapping, resetMapping, prefs, se
   const holidays = mapping.holidays ?? [];
   const local = prefs.local ?? defaultLocal;
   const setLocal = (patch: Partial<typeof local>) => setPrefs({ ...prefs, local: { ...local, ...patch } });
-  const [probe, setProbe] = useState<{ ok: boolean; message: string } | null>(null);
+  const [probe, setProbe] = useState<ModelCheck | null>(null);
   const [probing, setProbing] = useState(false);
   const probeConnection = async () => {
     setProbing(true);
     setProbe(null);
-    const result = await testConnection(local);
+    const result = await testModel(local);
     setProbe(result);
     setProbing(false);
   };
@@ -169,9 +169,14 @@ export function Settings({ project, mapping, setMapping, resetMapping, prefs, se
           </span>
         </div>
         <div className="drow">
-          <button className="btn" onClick={probeConnection} disabled={probing}>{probing ? "Testing…" : "Test connection"}</button>
+          <button className="btn primary" onClick={probeConnection} disabled={probing}>{probing ? "Testing…" : "Test the connection"}</button>
         </div>
-        {probe && <p className={probe.ok ? "muted" : "callout bad"}>{probe.message}</p>}
+        {probe && (
+          <p className={probe.ok ? "callout info" : "callout bad"}>
+            {probe.message}
+            {probe.fix && <><br /><span className="muted">{probe.fix}</span></>}
+          </p>
+        )}
       </section>
       {extra}
     </div>

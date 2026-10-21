@@ -2,7 +2,7 @@
 // plan — epics, their stories, their dates, their release and what has to happen first.
 // The draft is reviewed here, and only then added to the plan as one change.
 import { useMemo, useState } from "react";
-import { checkPlan, promptPlan, SYSTEM_PLAN, type PlanContext } from "../ai/plan";
+import { checkEpic, checkPlan, promptEpic, promptPlan, SYSTEM_EPIC, SYSTEM_PLAN, type PlanContext } from "../ai/plan";
 import { chatJson, defaultLocal, type LocalSettings } from "../ai/local";
 import { isEpic, releaseOf } from "../model/mapping";
 import type { Project } from "../model/normalize";
@@ -18,6 +18,7 @@ export function Planner({ project, mapping, editor, local }: {
   local?: LocalSettings;
 }) {
   const [description, setDescription] = useState("");
+  const [mode, setMode] = useState<"epic" | "plan">("epic");
   const [draft, setDraft] = useState<PlanDraft | null>(null);
   const [problems, setProblems] = useState<string[]>([]);
   const [working, setWorking] = useState(false);
@@ -39,10 +40,18 @@ export function Planner({ project, mapping, editor, local }: {
     if (!settings.enabled) { setError("Turn on a local model in Settings to have it write a plan."); return; }
     if (!description.trim()) { setError("Say what you want to build first."); return; }
     setWorking(true); setError(null); setMsg(null);
-    const answer = await chatJson(settings, SYSTEM_PLAN, promptPlan(context, description), checkPlan);
+    // One epic and a whole plan are the same shape from here on.
+    let asDraft: PlanDraft | null = null;
+    if (mode === "epic") {
+      const answer = await chatJson(settings, SYSTEM_EPIC, promptEpic(description, context.releases, context.labels, context.today), checkEpic);
+      if (answer) asDraft = { name: answer.title, summary: answer.summary, epics: [{ ...answer, why: answer.summary, after: [] }] };
+    } else {
+      const answer = await chatJson(settings, SYSTEM_PLAN, promptPlan(context, description), checkPlan);
+      if (answer) asDraft = answer;
+    }
     setWorking(false);
-    if (!answer) { setError("The model did not answer with a plan. Try again, or write the plan yourself."); return; }
-    const checked = checkDraft(project, mapping, answer);
+    if (!asDraft) { setError("The model did not answer with a plan. Try again, or write the plan yourself."); return; }
+    const checked = checkDraft(project, mapping, asDraft);
     setDraft(checked.draft);
     setProblems(checked.problems);
     setKept(new Set(checked.draft.epics.map(e => e.title)));
@@ -75,8 +84,12 @@ export function Planner({ project, mapping, editor, local }: {
       <div className="planner">
         <div>
           <section className="card pad" style={{ display: "grid", gap: 10 }}>
+            <div className="seg" role="group" aria-label="What to write">
+              <button className={mode === "epic" ? "on" : ""} onClick={() => setMode("epic")}>One epic</button>
+              <button className={mode === "plan" ? "on" : ""} onClick={() => setMode("plan")}>A whole plan</button>
+            </div>
             <div className="setting">
-              <label htmlFor="plan-what">What are you building?</label>
+              <label htmlFor="plan-what">{mode === "epic" ? "What is this epic for?" : "What are you building?"}</label>
               <VoiceInput value={description} onChange={setDescription} settings={settings}
                 placeholder="A billing rework: a new invoice screen, a payment retry service, and a release for March." />
             </div>
@@ -111,7 +124,8 @@ export function Planner({ project, mapping, editor, local }: {
                       onChange={ev => setKept(k => { const n = new Set(k); ev.target.checked ? n.add(e.title) : n.delete(e.title); return n; })} />
                     <b>{e.title}</b>
                     <span className="muted">{e.release ?? "no release"} · {e.stories.length} stories{e.start ? ` · ${e.start} – ${e.end}` : ""}</span>
-                    {e.why && <div className="muted">{e.why}</div>}
+                    {e.summary && <div className="plan-summary">{e.summary}</div>}
+                    {e.why && !e.summary && <div className="muted">{e.why}</div>}
                     {e.stories.length > 0 && (
                       <ul className="emap-list" style={{ marginTop: 2 }}>
                         {e.stories.map(s => {

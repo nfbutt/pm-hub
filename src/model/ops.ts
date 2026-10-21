@@ -8,7 +8,7 @@ import { emptyDraft, type Draft } from "./schedule";
 
 export interface DateRange { start: string | null; end: string | null }
 export interface StateValue { state: "open" | "closed"; reason: string | null }
-export interface NewItem { title: string; repo: string | null; parentKey: string | null; labels: string[]; fields: Record<string, FieldValue> }
+export interface NewItem { title: string; body?: string; repo: string | null; parentKey: string | null; labels: string[]; fields: Record<string, FieldValue> }
 
 export type Op =
   /** Bar dates. `fields` records which date fields the dates map to when the op was made. */
@@ -87,6 +87,7 @@ export function applyOps(base: Project, ops: Op[]): Applied {
       const item: Item = {
         id: op.key, key: op.key, kind: "issue", number: null, repo: op.item.repo, title: op.item.title, url: null,
         state: "open", stateReason: null, createdAt: null, closedAt: null, updatedAt: null,
+        body: op.item.body,
         labels: [...op.item.labels], assignees: [], milestone: null, issueType: null, parentKey: op.item.parentKey,
         subIssues: null, blockedBy: [], archived: false, fields: { ...op.item.fields }, ids: emptyIds(),
       };
