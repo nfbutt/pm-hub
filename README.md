@@ -103,16 +103,20 @@ In *Settings → Local model*, **What does the server have?** asks the server fo
 
 pm-hub also matches a name to the closest one the server has, so a family name (`qwen3`) finds the model you actually installed (`qwen3:8b`) and a family with several sizes takes the smallest. The default embedding model is `qwen3-embedding:0.6b` — 1024 dimensions in 639 MB, rather than the 4.7 GB behind the `latest` tag.
 
-### A model on your own computer (optional)
+### A model on your own computer, or one somewhere else (optional)
 
 The Epic Map and the Roadmap can ask a model running on **your** machine to compare work by meaning, name what an epic is really about, explain an overlap, suggest epics that are missing, and say which items really block each other. It is off until you turn it on in *Settings → Local model*.
 
-- **Nothing leaves your computer.** The address has to be `localhost` or `127.0.0.1`; anything else is refused before a request is made.
+- **Nothing leaves your computer — unless you say otherwise.** The address has to be `localhost` or `127.0.0.1`; anything else is refused before a request is made, unless you switch to a hosted model and allow it.
 - **Only issue text goes to the model**: titles and bodies, plus the epic titles and the words two epics share. **Your GitHub token is never part of a request**, and no project metadata, file or repository is sent.
 - **Nothing is applied by the model.** It proposes; pm-hub checks every proposal against the plan — real items, no loops, and a reason that really appears in the issue — and you decide with one click. A proposal that fails a check is dropped, and the card says how many.
 - Embeddings and answers are cached in your browser's IndexedDB, so the model is asked once per item, not once per visit.
 - If the model is slow, unreachable or answers something that does not make sense, pm-hub quietly falls back to its own analysis.
 - The built page's Content-Security-Policy allows `http://localhost:*` and `http://127.0.0.1:*` in `connect-src`, and nothing else.
+
+**A hosted model.** *Settings → Local model* can also point at a hosted service that speaks the same API — OpenRouter, for one, which runs Qwen. The switch is deliberate and separate from the address: choosing OpenRouter fills in the address and a model name, and you still have to tick *"I understand that a model that runs elsewhere reads the text of my issues"*. Until you do, pm-hub refuses to make the request. The key is kept out of your preferences and out of the shared plan history, and by default it lives only for that tab.
+
+What a hosted model receives: the titles and bodies of the issues it is asked about, and the question itself. Never your GitHub token, never a repository, never the plan history. And note that OpenRouter has no embedding models, so with one the Epic Map compares by words rather than by meaning.
 
 Ollama refuses browser calls from another origin unless you allow this page. Start it with:
 

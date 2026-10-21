@@ -98,13 +98,26 @@ describe("checking the model", () => {
     const result = await testModel(settings);
     expect(result.ok).toBe(true);
     expect(result.embed).toBe(false);
-    expect(result.fix).toContain("ollama pull");
+    expect(result.fix).toContain("embedding model");
   });
 
   it("refuses an address that is not on this computer", async () => {
     const result = await testModel({ ...settings, base: "https://api.openai.com/v1" });
     expect(result.ok).toBe(false);
-    expect(result.fix).toContain("localhost");
+    expect(result.fix).toContain("not on this computer");
+  });
+
+  it("talks to a model elsewhere only when that is allowed", async () => {
+    const mock = vi.fn(async (_url: string, _init?: { body?: string }) => ({ ok: true, status: 200, json: async () => ({ choices: [{ message: { content: "{\"ok\":true}" } }] }) }));
+    vi.stubGlobal("fetch", mock);
+    const hosted = { ...settings, base: "https://openrouter.ai/api/v1" };
+    // Without permission it is not called at all.
+    await chatJson(hosted, "s", "u", (v): v is unknown => typeof v === "object" && v !== null).catch(() => undefined);
+    expect(mock).not.toHaveBeenCalled();
+    // With permission it is.
+    await chatJson({ ...hosted, allowRemote: true }, "s", "u", (v): v is unknown => typeof v === "object" && v !== null);
+    expect(mock).toHaveBeenCalled();
+    expect(String(mock.mock.calls[0]![0])).toContain("openrouter.ai");
   });
 
   it("counts a thinking model as answering, even when it thinks first", async () => {

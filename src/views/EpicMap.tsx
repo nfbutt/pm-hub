@@ -163,7 +163,7 @@ export function EpicMap({ project, mapping, draft, editor, local, history, revie
         </div>
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
           <span className={`pill ${connected ? "accent" : unreachable ? "warn" : ""}`} title={unreachable ? "The model on this computer did not answer. pm-hub is using its own analysis." : undefined}>
-            {connected ? "✦ Qwen connected" : unreachable ? "✦ Qwen not answering" : "Local analysis"}
+            {connected ? "✦ Model ready" : unreachable ? "✦ Model not answering" : "Local analysis"}
           </span>
           <div className="seg" role="group" aria-label="Colour the map by">
             {LENSES.map(l => <button key={l.id} className={lens === l.id ? "on" : ""} onClick={() => setLens(l.id)}>{l.name}</button>)}

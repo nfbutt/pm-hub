@@ -49,8 +49,8 @@ export function AiStatus({ settings, settingsHref }: { settings: LocalSettings; 
   return (
     <div ref={box} style={{ position: "relative" }}>
       <button className={`btn ai-pill ${state}`} onClick={() => setOpen(o => !o)}
-        aria-expanded={open} title="Is the model on this computer working?">
-        <span className="ai-dot" aria-hidden="true" /> {label}
+        aria-expanded={open} title="Is the model working?">
+        <span className="ai-dot" aria-hidden="true" /> {label}{settings.allowRemote ? " · hosted" : ""}
       </button>
       {open && (
         <div className="ai-panel" role="dialog" aria-label="AI connection">
@@ -86,7 +86,9 @@ export function AiStatus({ settings, settingsHref }: { settings: LocalSettings; 
             </>
           )}
           <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-            Everything stays on this computer. pm-hub never sends anything to a hosted service.
+            {settings.allowRemote
+              ? <>This model runs somewhere else. It reads the text of your issues — never your GitHub token, never a repository, never the plan history.</>
+              : <>Everything stays on this computer. pm-hub never sends anything to a hosted service.</>}
           </p>
         </div>
       )}

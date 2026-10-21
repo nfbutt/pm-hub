@@ -30,6 +30,11 @@ export interface LocalSettings {
    * How much context the model gets. Ollama's own default is 4096, which is not much.
    */
   contextTokens?: number;
+  /**
+   * Permission to talk to a model that is not on this computer. Off by default: a hosted
+   * model reads the text of your issues.
+   */
+  allowRemote?: boolean;
 }
 
 /** Where the speech server usually lives. */
@@ -52,6 +57,17 @@ export const DEFAULT_MAX_TOKENS = 4000;
 export const DEFAULT_CONTEXT = 16384;
 
 /**
+ * May pm-hub talk to this address? A model on this computer, always. A model somewhere
+ * else, only with permission — because it reads the text of your issues.
+ */
+export function canCall(settings: LocalSettings): { ok: boolean; why: string | null } {
+  if (isLocalBase(settings.base)) return { ok: true, why: null };
+  if (settings.allowRemote) return { ok: true, why: null };
+  const host = (() => { try { return new URL(settings.base).host; } catch { return settings.base; } })();
+  return { ok: false, why: `${host} is not on this computer. A model that runs elsewhere reads the text of your issues, so that has to be allowed first.` };
+}
+
+/**
  * Only this computer is allowed. The promise in the README is that nothing leaves the
  * machine, so a base URL that points anywhere else is refused rather than called.
  */
@@ -65,15 +81,18 @@ export function isLocalBase(base: string): boolean {
 
 const trimSlash = (s: string) => s.replace(/\/+$/, "");
 
+import { readApiKey } from "../store/key";
+
 async function post(settings: LocalSettings, path: string, body: unknown): Promise<unknown | null> {
-  if (!isLocalBase(settings.base)) return null;
+  if (!canCall(settings).ok) return null;
   const ctrl = new AbortController();
   const wait = Math.max(5, settings.timeoutSeconds ?? DEFAULT_TIMEOUT) * 1000;
   const timer = setTimeout(() => ctrl.abort(), wait);
   try {
+    const key = readApiKey();
     const res = await fetch(`${trimSlash(settings.base)}${path}`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...(key ? { authorization: `Bearer ${key}` } : {}) },
       body: JSON.stringify(body),
       signal: ctrl.signal,
     });
@@ -182,10 +201,11 @@ let modelCache: { at: number; base: string; models: string[] } | null = null;
  * guess — "qwen3" is not the same as "qwen3:8b" — so it is better to ask.
  */
 export async function listModels(settings: LocalSettings): Promise<string[] | null> {
-  if (!isLocalBase(settings.base)) return null;
+  if (!canCall(settings).ok) return null;
   if (modelCache && modelCache.base === settings.base && Date.now() - modelCache.at < 60000) return modelCache.models;
   try {
-    const res = await fetch(`${trimSlash(settings.base)}/models`);
+    const key = readApiKey();
+    const res = await fetch(`${trimSlash(settings.base)}/models`, { headers: key ? { authorization: `Bearer ${key}` } : {} });
     if (!res.ok) return null;
     const data = await res.json();
     const rows = (data as { data?: { id?: unknown }[] }).data;
@@ -216,7 +236,7 @@ export function forgetModels() { modelCache = null; }
  * ("qwen3"), which the server does not know.
  */
 export async function resolveModel(settings: LocalSettings, name: string): Promise<string> {
-  if (!settings.enabled || !isLocalBase(settings.base)) return name;
+  if (!settings.enabled || !canCall(settings).ok) return name;
   const models = await listModels(settings);
   if (!models || models.includes(name)) return name;
   const base = name.split(":")[0]!;
@@ -232,8 +252,8 @@ export async function resolveModel(settings: LocalSettings, name: string): Promi
  * so the answer says which of them is the problem.
  */
 export async function testModel(settings: LocalSettings): Promise<ModelCheck & { seconds: number }> {
-  if (!isLocalBase(settings.base)) {
-    return { ok: false, chat: false, embed: false, message: "That address is not on this computer.", fix: "Use localhost or 127.0.0.1.", seconds: 0 };
+  if (!canCall(settings).ok) {
+    return { ok: false, chat: false, embed: false, message: "That address is not on this computer.", fix: canCall(settings).why ?? "Use localhost or 127.0.0.1.", seconds: 0 };
   }
   const started = Date.now();
   const chat = await post({ ...settings, enabled: true }, "/chat/completions", {
@@ -253,7 +273,11 @@ export async function testModel(settings: LocalSettings): Promise<ModelCheck & {
 
   const slow = seconds > 20 ? ` It took ${seconds} seconds, so the model is slow: a thinking model (qwen3 and its family) fills its context before it answers, and a smaller one that answers straight away will feel much better.` : "";
   if (chatOk && embedOk) return { ok: true, chat: true, embed: true, message: `Everything works. The model answered “${(said || "yes").trim().slice(0, 40)}” in ${seconds} seconds.${slow}`, fix: null, seconds };
-  if (chatOk) return { ok: true, chat: true, embed: false, message: "The model answers, but it cannot turn text into vectors.", fix: `Pull the embedding model: ollama pull ${settings.embedModel}`, seconds };
+  if (chatOk) return {
+    ok: true, chat: true, embed: false, seconds,
+    message: "The model answers, but it cannot turn text into vectors.",
+    fix: `If the server has an embedding model, name it here. Without one the map compares by words rather than by meaning.`,
+  };
   if (embedOk) return { ok: true, chat: false, embed: true, message: "The model can turn text into vectors, but it does not answer.", fix: `Pull the chat model: ollama pull ${settings.chatModel}`, seconds };
   // Say what the server does have, so the fix is a name to type rather than a guess.
   const models = await listModels(settings);
