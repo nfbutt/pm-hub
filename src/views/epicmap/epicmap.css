@@ -155,3 +155,16 @@
 
 /* the summary an epic gets from a model */
 .plan-summary { font-size: 12.5px; color: var(--fg); border-left: 2px solid var(--accent-soft); padding-left: 8px; margin: 2px 0; }
+
+/* the planner, and the plan cards it shares with the rest of the app */
+.planner { display: grid; gap: 14px; max-width: 940px; }
+.planner > .seg { justify-self: start; padding: 4px; }
+.planner > .seg button { padding: 7px 14px; font-size: 13.5px; }
+.plan-sugg {
+  border: 1px solid var(--line); border-radius: 10px; padding: 11px 13px; background: var(--surface);
+  display: grid; gap: 7px; transition: border-color .12s ease;
+}
+.plan-sugg:hover { border-color: color-mix(in srgb, var(--accent) 28%, var(--line)); }
+.plan-sugg .emap-list { gap: 5px; }
+.plan-sugg .good { color: var(--good); font-weight: 700; }
+.plan-sugg .muted { font-size: 12px; }

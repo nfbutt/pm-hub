@@ -133,6 +133,10 @@ Still to do in this phase: a model filling in what the grammar cannot parse, and
 
 **Phase 17 — together — done.** A proposal in the shared plan history, the comments on the plan's own issues read back so a colleague's writing is visible, and the last-second race between the check and the apply closed.
 
+**Phase 20 — the planner, three ways — done.** "Is it already here?" matches what you describe against the epics you have and shows which pieces are already covered and which are not, with a way to add the missing ones to the epic that covers the rest. "Tidy an epic" asks a model to read an epic's stories and say what is missing, what is named badly and which two repeat each other; the person ticks what they want. Both reuse the machinery that was already there: the story matcher, the ops, and the review screen.
+
+**Phase 19 — light and dark, and better type — done.** The theme is a real system, not a stylesheet: a switch in the top bar (light, dark, or the system), applied before the first paint so it never flashes, remembered, and the charts read their colours out of the page. The type moves to Inter and JetBrains Mono, with a type scale, tighter tracking and real focus rings.
+
 **Phase 18 — easy for everyone — mostly done.** Focus management in the drawer and the modal, live regions, unique ids in the picker, roles on the progress bars, a keyboard way to select a row, and the chart views saying where the same information can be read as text. Still to do: a text equivalent of the Gantt and the Epic Map for screen readers, and the Epic Map's live region, which mounts with its text already in it.
 
 ### Later, when there is something to write back

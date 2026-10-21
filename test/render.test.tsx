@@ -87,10 +87,10 @@ describe("views render with the demo project", () => {
   it("Planner asks what you are building and says what to do next", () => {
     const html = renderToString(<Planner project={project} mapping={mapping} />);
     expect(html).toContain("Planner");
-    expect(html).toContain("What is this epic for?");
-    expect(html).toContain("One epic");
-    expect(html).toContain("A whole plan");
-    expect(html).toContain("Write a plan");
+    expect(html).toContain("Is it already here?");
+    expect(html).toContain("Write it");
+    expect(html).toContain("Tidy an epic");
+    expect(html).toContain("What are you building?");
     expect(html).toContain("Turn on a local model");
   });
 

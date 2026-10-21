@@ -230,3 +230,83 @@ describe("the microphone", () => {
     expect(await transcribe(settings, new Blob(["x"]))).toBeNull();
   });
 });
+
+import { matchEpics, splitInput } from "../src/model/plan/match";
+import { amendmentOps, epicStories, type Amendments } from "../src/model/plan/amend";
+import { checkAmend } from "../src/ai/plan";
+const epic = (title: string) => project.items.find(i => i.title === title)!;
+
+describe("is it already here?", () => {
+  it("splits a list into the pieces it lists", () => {
+    const items = splitInput("- an invoice screen\n- a retry service\n- a refund flow");
+    expect(items.map(i => i.text)).toEqual(["an invoice screen", "a retry service", "a refund flow"]);
+  });
+
+  it("splits a sentence into its parts", () => {
+    const items = splitInput("An invoice screen. A retry service.");
+    expect(items).toHaveLength(2);
+  });
+
+  it("finds the epic that already covers the work", () => {
+    // The demo's billing epic holds "invoice PDF layout" and "saved payment methods".
+    const matches = matchEpics(project, mapping, "saved payment methods\nsomething nobody has");
+    expect(matches.length).toBeGreaterThan(0);
+    expect(matches[0]!.epic.title).toBe("Billing and invoices");
+    expect(matches[0]!.covered[0]!.story).toBeTruthy();
+    expect(matches[0]!.missing.map(m => m.text)).toContain("something nobody has");
+  });
+
+  it("says nothing when nothing matches", () => {
+    expect(matchEpics(project, mapping, "quantum teleportation")).toHaveLength(0);
+  });
+
+  it("scores the share of the input an epic covers", () => {
+    const matches = matchEpics(project, mapping, "invoice PDF layout\nsaved payment methods");
+    expect(matches[0]!.score).toBeGreaterThan(0.5);
+    expect(matches[0]!.missing).toHaveLength(0);
+  });
+});
+
+describe("tidying an epic", () => {
+  it("keeps only the changes about stories the epic really has", () => {
+    const a = epic("Billing and invoices");
+    const stories = epicStories(project, a);
+    expect(stories.length).toBeGreaterThan(0);
+    const amendments: Amendments = {
+      add: [{ title: "A new story", why: "It was missing.", days: 3 }],
+      rename: [{ key: stories[0]!.key, from: stories[0]!.title, to: "A better name", why: "Clearer." }],
+      overlap: [{ keys: [stories[0]!.key, "o/r#999"], titles: [stories[0]!.title, "Nothing"], why: "They repeat." }],
+    };
+    const changes = amendmentOps(project, a, amendments, new Set(["add:A new story", `rename:${stories[0]!.key}`]));
+    expect(changes).toHaveLength(2);
+    expect(changes[0]!.kind).toBe("add");
+    expect(changes[1]!.kind).toBe("rename");
+  });
+
+  it("puts a new story under the epic when it is applied", () => {
+    const a = epic("Billing and invoices");
+    const amendments: Amendments = { add: [{ title: "A brand new story", why: "", days: 2 }], rename: [], overlap: [] };
+    const changes = amendmentOps(project, a, amendments, new Set(["add:A brand new story"]));
+    const applied = applyOps(project, changes.flatMap(c => c.ops));
+    const created = applied.project.items.find(i => i.title === "A brand new story");
+    expect(created).toBeDefined();
+    expect(created!.parentKey).toBe(a.key);
+  });
+
+  it("takes a story out of the project when that is what was picked", () => {
+    const a = epic("Billing and invoices");
+    const stories = epicStories(project, a);
+    const amendments: Amendments = { add: [], rename: [], overlap: [{ keys: [stories[0]!.key, stories[1]!.key], titles: [stories[0]!.title, stories[1]!.title], why: "Same work." }] };
+    const changes = amendmentOps(project, a, amendments, new Set([`archive:${stories[0]!.key}`]));
+    expect(changes[0]!.kind).toBe("archive");
+    const applied = applyOps(project, changes.flatMap(c => c.ops));
+    expect(applied.project.items.find(i => i.key === stories[0]!.key)).toBeUndefined();
+  });
+
+  it("will not accept an answer that is not a set of changes", () => {
+    expect(checkAmend({ add: [{ title: "x" }] })).toBe(false);
+    expect(checkAmend({ add: [], rename: [{ key: "k", to: "" }], overlap: [] })).toBe(false);
+    expect(checkAmend({ add: [], rename: [], overlap: [{ keys: ["a"], titles: [] }] })).toBe(false);
+    expect(checkAmend({ add: [], rename: [], overlap: [] })).toBe(true);
+  });
+});
