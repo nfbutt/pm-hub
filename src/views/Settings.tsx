@@ -1,7 +1,7 @@
 import { labelPrefixes, type LaneRule, type Mapping, type ReleaseRule } from "../model/mapping";
 import type { Project } from "../model/normalize";
 import type { Prefs } from "../store/cache";
-import { DEFAULT_VOICE_BASE, defaultLocal, testModel, type ModelCheck } from "../ai/local";
+import { DEFAULT_VOICE_BASE, defaultLocal, listModels, testModel, type ModelCheck } from "../ai/local";
 import { useState } from "react";
 import type { ReactNode } from "react";
 
@@ -26,6 +26,16 @@ export function Settings({ project, mapping, setMapping, resetMapping, prefs, se
   const setLocal = (patch: Partial<typeof local>) => setPrefs({ ...prefs, local: { ...local, ...patch } });
   const [probe, setProbe] = useState<ModelCheck | null>(null);
   const [probing, setProbing] = useState(false);
+  // The models the server actually has. The names are not always what you would guess,
+  // so it is better to ask than to remember.
+  const [installed, setInstalled] = useState<string[] | null>(null);
+  const [listing, setListing] = useState(false);
+  const findModels = async () => {
+    setListing(true);
+    const found = await listModels(local);
+    setInstalled(found);
+    setListing(false);
+  };
   const probeConnection = async () => {
     setProbing(true);
     setProbe(null);
@@ -155,6 +165,21 @@ export function Settings({ project, mapping, setMapping, resetMapping, prefs, se
         <div className="setting">
           <label htmlFor="ai-chat">Chat model</label>
           <input id="ai-chat" className="input" value={local.chatModel} onChange={e => setLocal({ chatModel: e.target.value })} />
+        </div>
+        <div className="drow">
+          <button className="btn" onClick={() => void findModels()} disabled={listing}>{listing ? "Looking…" : "What does the server have?"}</button>
+          {installed && installed.length > 0 && (
+            <span className="muted" style={{ fontSize: 12 }}>
+              {installed.map(id => (
+                <span key={id} style={{ marginRight: 10, whiteSpace: "nowrap" }}>
+                  <code>{id}</code>{" "}
+                  <button className="linkbtn" onClick={() => setLocal({ chatModel: id })}>chat</button>{" "}
+                  <button className="linkbtn" onClick={() => setLocal({ embedModel: id })}>embeddings</button>
+                </span>
+              ))}
+            </span>
+          )}
+          {installed && !installed.length && <span className="muted" style={{ fontSize: 12 }}>Nothing answered on that address.</span>}
         </div>
         <div className="setting">
           <label htmlFor="ai-embed">Embedding model</label>

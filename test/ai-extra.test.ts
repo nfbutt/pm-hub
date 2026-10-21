@@ -7,7 +7,7 @@ import { detectMapping } from "../src/model/mapping";
 import { applyOps } from "../src/model/ops";
 import { newItem } from "../src/model/edits";
 import { checkDraft, draftOps } from "../src/model/plan/draft";
-import { testModel, type LocalSettings } from "../src/ai/local";
+import { listModels, testModel, type LocalSettings } from "../src/ai/local";
 import { checkEpic, promptEpic } from "../src/ai/plan";
 
 const f = makeFixture("2026-10-19");
@@ -104,5 +104,36 @@ describe("checking the model", () => {
     const result = await testModel({ ...settings, base: "https://api.openai.com/v1" });
     expect(result.ok).toBe(false);
     expect(result.fix).toContain("localhost");
+  });
+
+  it("counts a thinking model as answering, even when it thinks first", async () => {
+    // qwen3 and friends spend their first tokens reasoning, and can run out of room
+    // before they answer. The model is working; the test used to say it was not.
+    stub({ choices: [{ message: { content: "", reasoning: "Okay, the user wants" } }] }, { data: [{ embedding: [1] }] });
+    const result = await testModel(settings);
+    expect(result.ok).toBe(true);
+    expect(result.chat).toBe(true);
+  });
+
+  it("says what the server has, so the fix is a name to type", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.endsWith("/models")) return { ok: true, status: 200, json: async () => ({ data: [{ id: "qwen3:8b" }, { id: "nomic-embed-text:latest" }] }) };
+      return { ok: false, status: 500, json: async () => ({}) };
+    }));
+    const result = await testModel({ ...settings, chatModel: "qwen3" });
+    expect(result.ok).toBe(false);
+    expect(result.fix).toContain("qwen3:8b");
+  });
+
+  it("lists the models a server has", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ data: [{ id: "qwen3:8b" }, { id: "nomic-embed-text:latest" }] }) })));
+    expect(await listModels(settings)).toEqual(["qwen3:8b", "nomic-embed-text:latest"]);
+  });
+
+  it("will not ask a server that is not on this computer", async () => {
+    const mock = vi.fn();
+    vi.stubGlobal("fetch", mock);
+    expect(await listModels({ ...settings, base: "https://api.openai.com/v1" })).toBeNull();
+    expect(mock).not.toHaveBeenCalled();
   });
 });
