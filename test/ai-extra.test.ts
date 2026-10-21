@@ -150,7 +150,8 @@ describe("a model that only thinks", () => {
       ok: true, status: 200,
       json: async () => ({ choices: [{ message: { content: "", reasoning: "Let me think about this for a while" } }] }),
     })));
-    await expect(chatJson(settings, "s", "u", (v): v is unknown => true)).rejects.toThrow(ThinkingModelError);
+    const any = (_v: unknown): _v is unknown => true;
+    await expect(chatJson(settings, "s", "u", any)).rejects.toThrow(ThinkingModelError);
   });
 
   it("is not an error when the model answers", async () => {
@@ -163,13 +164,14 @@ describe("a model that only thinks", () => {
   });
 
   it("asks for room to finish, and for a bigger context", async () => {
-    const mock = vi.fn(async () => ({
+    const mock = vi.fn(async (_url: string, _init?: { body?: string }) => ({
       ok: true, status: 200,
       json: async () => ({ choices: [{ message: { content: "{}", reasoning: "" } }] }),
     }));
     vi.stubGlobal("fetch", mock);
-    await chatJson(settings, "s", "u", (v): v is unknown => true).catch(() => undefined);
-    const body = JSON.parse(String(mock.mock.calls[0]![1]!.body));
+    const any = (_v: unknown): _v is unknown => true;
+    await chatJson(settings, "s", "u", any).catch(() => undefined);
+    const body = JSON.parse(String(mock.mock.calls[0]![1]?.body ?? "{}"));
     expect(body.max_tokens).toBeGreaterThan(1000);
     expect(body.options.num_ctx).toBeGreaterThan(4096);
   });
