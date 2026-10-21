@@ -104,12 +104,15 @@ export async function chatJson<T>(settings: LocalSettings, system: string, user:
 export async function testConnection(settings: LocalSettings): Promise<{ ok: boolean; message: string }> {
   if (!isLocalBase(settings.base)) return { ok: false, message: "The address has to be on this computer: localhost or 127.0.0.1." };
   const data = await post({ ...settings, enabled: true }, "/chat/completions", {
-    model: settings.chatModel, temperature: 0, max_tokens: 32,
+    model: settings.chatModel, temperature: 0, max_tokens: 256,
     messages: [{ role: "user", content: "Reply with the single word: ready" }],
   });
-  const content = (data as { choices?: { message?: { content?: unknown } }[] } | null)?.choices?.[0]?.message?.content;
-  if (typeof content !== "string") return { ok: false, message: "No answer from the model. Check the address and the model name." };
-  return { ok: true, message: `The model answered: “${content.trim().slice(0, 60)}”` };
+  const message = (data as { choices?: { message?: { content?: unknown; reasoning?: unknown } }[] } | null)?.choices?.[0]?.message;
+  const content = typeof message?.content === "string" ? message.content : "";
+  // A thinking model may think first and run out of room; its reasoning is still an answer.
+  const reasoning = typeof message?.reasoning === "string" ? message.reasoning : "";
+  if (!content.trim() && !reasoning.trim()) return { ok: false, message: "No answer from the model. Check the address and the model name." };
+  return { ok: true, message: `The model answered: “${(content || reasoning).trim().slice(0, 60)}”` };
 }
 
 /** What the model can and cannot do. */
@@ -126,6 +129,25 @@ export interface ModelCheck {
 }
 
 /**
+ * The models a local server has. The names it uses are not always the ones you would
+ * guess — "qwen3" is not the same as "qwen3:8b" — so it is better to ask.
+ */
+export async function listModels(settings: LocalSettings): Promise<string[] | null> {
+  if (!isLocalBase(settings.base)) return null;
+  try {
+    const res = await fetch(`${trimSlash(settings.base)}/models`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const rows = (data as { data?: { id?: unknown }[] }).data;
+    if (!Array.isArray(rows)) return null;
+    const ids = rows.map(r => r?.id).filter((id): id is string => typeof id === "string");
+    return ids.length ? ids : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Checks the model properly: the chat endpoint and the embeddings endpoint, one at a time,
  * so the answer says which of them is the problem.
  */
@@ -134,19 +156,31 @@ export async function testModel(settings: LocalSettings): Promise<ModelCheck> {
     return { ok: false, chat: false, embed: false, message: "That address is not on this computer.", fix: "Use localhost or 127.0.0.1." };
   }
   const chat = await post({ ...settings, enabled: true }, "/chat/completions", {
-    model: settings.chatModel, temperature: 0, max_tokens: 16,
+    model: settings.chatModel, temperature: 0, max_tokens: 256,
     messages: [{ role: "user", content: "Reply with the single word: ready" }],
   });
-  const said = (chat as { choices?: { message?: { content?: unknown } }[] } | null)?.choices?.[0]?.message?.content;
-  const chatOk = typeof said === "string";
+  const message = (chat as { choices?: { message?: { content?: unknown; reasoning?: unknown } }[] } | null)?.choices?.[0]?.message;
+  const said = typeof message?.content === "string" ? message.content : "";
+  // A thinking model spends its first tokens reasoning, and can run out of room before
+  // it answers. Its reasoning still means the model is there and working.
+  const thought = typeof message?.reasoning === "string" && message.reasoning.trim().length > 0;
+  const chatOk = said.trim().length > 0 || thought;
 
   const embed = await post({ ...settings, enabled: true }, "/embeddings", { model: settings.embedModel, input: ["ready"] });
   const embedOk = Array.isArray((embed as { data?: unknown[] } | null)?.data);
 
-  if (chatOk && embedOk) return { ok: true, chat: true, embed: true, message: `Everything works. The model answered “${String(said).trim().slice(0, 40)}”.`, fix: null };
+  if (chatOk && embedOk) return { ok: true, chat: true, embed: true, message: `Everything works. The model answered “${(said || "yes").trim().slice(0, 40)}”.`, fix: null };
   if (chatOk) return { ok: true, chat: true, embed: false, message: "The model answers, but it cannot turn text into vectors.", fix: `Pull the embedding model: ollama pull ${settings.embedModel}` };
   if (embedOk) return { ok: true, chat: false, embed: true, message: "The model can turn text into vectors, but it does not answer.", fix: `Pull the chat model: ollama pull ${settings.chatModel}` };
-  return { ok: false, chat: false, embed: false, message: "Nothing answered on that address.", fix: `Is the model server running, and is it called “${settings.chatModel}”?` };
+  // Say what the server does have, so the fix is a name to type rather than a guess.
+  const models = await listModels(settings);
+  return {
+    ok: false, chat: false, embed: false,
+    message: "Nothing answered on that address.",
+    fix: models?.length
+      ? `The server has ${models.join(", ")}. Is the model called “${settings.chatModel}”?`
+      : `Is the model server running, and is it called “${settings.chatModel}”?`,
+  };
 }
 
 // ---------------------------------------------------------------- answers

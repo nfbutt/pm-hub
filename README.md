@@ -81,7 +81,9 @@ The app follows your system by default. The switch in the top bar sets it to lig
 
 ### Is the AI working?
 
-There is a pill in the top bar that says so: **AI off**, **AI ready**, or **AI not answering**. Click it to check the connection — it tests the chat model and the embedding model one at a time, and tells you which half is missing and the exact command to fix it (`ollama pull qwen3-embedding`). The answer is remembered, so the app does not ask the model again on every page.
+There is a pill in the top bar that says so: **AI off**, **AI ready**, or **AI not answering**. Click it to check the connection — it tests the chat model and the embedding model one at a time, and tells you which half is missing, the exact command to fix it (`ollama pull qwen3-embedding`), and **the names the server actually has** so the fix is a name to type rather than a guess. The answer is remembered, so the app does not ask the model again on every page.
+
+In *Settings → Local model*, **What does the server have?** asks the server for its models and lets you put any of them in the chat or the embeddings field. It is worth doing once: the name the server uses is often not the name you would guess — `qwen3` is not `qwen3:8b`.
 
 ### A model on your own computer (optional)
 
