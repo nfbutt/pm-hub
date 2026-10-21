@@ -2,6 +2,7 @@
 // panel that checks the connection and says what to do about it.
 import { useEffect, useRef, useState } from "react";
 import { testModel, type LocalSettings, type ModelCheck } from "../../ai/local";
+import { testSpeech, type SpeechCheck } from "../../ai/voice";
 
 const LAST_CHECK = "pm-hub:ai-check";
 
@@ -19,6 +20,7 @@ export function AiStatus({ settings, settingsHref }: { settings: LocalSettings; 
   const [open, setOpen] = useState(false);
   const [checking, setChecking] = useState(false);
   const [check, setCheck] = useState<ModelCheck | null>(cached()?.check ?? null);
+  const [speech, setSpeech] = useState<SpeechCheck | null>(null);
   const box = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -35,6 +37,8 @@ export function AiStatus({ settings, settingsHref }: { settings: LocalSettings; 
     const result = await testModel(settings);
     setCheck(result);
     remember(result);
+    // The microphone needs a different program, so it is checked on its own.
+    setSpeech(await testSpeech(settings));
     setChecking(false);
   }
 
@@ -66,6 +70,12 @@ export function AiStatus({ settings, settingsHref }: { settings: LocalSettings; 
                 <p className={check.ok ? "good" : "bad"}>
                   {check.message}
                   {check.fix && <><br /><span className="muted">{check.fix}</span></>}
+                </p>
+              )}
+              {speech && (
+                <p className={speech.ok ? "muted" : "bad"}>
+                  <b>Microphone:</b> {speech.message}
+                  {speech.fix && <><br /><span className="muted">{speech.fix}</span></>}
                 </p>
               )}
               <div className="ai-actions">

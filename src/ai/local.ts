@@ -16,6 +16,20 @@ export interface LocalSettings {
    */
   voiceBase?: string;
   voiceModel?: string;
+  /**
+   * How long to wait for the model, in seconds. A model on this machine can take
+   * minutes: a thinking model fills its context before it answers.
+   */
+  timeoutSeconds?: number;
+  /**
+   * How many tokens the model may use. Without a limit a thinking model can spend the
+   * whole budget thinking and never answer.
+   */
+  maxTokens?: number;
+  /**
+   * How much context the model gets. Ollama's own default is 4096, which is not much.
+   */
+  contextTokens?: number;
 }
 
 /** Where the speech server usually lives. */
@@ -29,6 +43,13 @@ export const defaultLocal: LocalSettings = {
 
 /** How long to wait for the model before giving up and using pm-hub's own analysis. */
 export const TIMEOUT_MS = 20000;
+
+/** The default wait. Long, because a local model is not a hosted one. */
+export const DEFAULT_TIMEOUT = 180;
+/** How many tokens a model may use. */
+export const DEFAULT_MAX_TOKENS = 4000;
+/** How much context a model gets. Ollama's own default is 4096, which is not much. */
+export const DEFAULT_CONTEXT = 16384;
 
 /**
  * Only this computer is allowed. The promise in the README is that nothing leaves the
@@ -47,7 +68,8 @@ const trimSlash = (s: string) => s.replace(/\/+$/, "");
 async function post(settings: LocalSettings, path: string, body: unknown): Promise<unknown | null> {
   if (!isLocalBase(settings.base)) return null;
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  const wait = Math.max(5, settings.timeoutSeconds ?? DEFAULT_TIMEOUT) * 1000;
+  const timer = setTimeout(() => ctrl.abort(), wait);
   try {
     const res = await fetch(`${trimSlash(settings.base)}${path}`, {
       method: "POST",
@@ -70,7 +92,10 @@ async function post(settings: LocalSettings, path: string, body: unknown): Promi
  */
 export async function embed(settings: LocalSettings, texts: string[]): Promise<number[][] | null> {
   if (!texts.length) return [];
-  const data = await post(settings, "/embeddings", { model: await resolveModel(settings, settings.embedModel), input: texts });
+  const data = await post(settings, "/embeddings", {
+    model: await resolveModel(settings, settings.embedModel), input: texts,
+    options: { num_ctx: settings.contextTokens ?? DEFAULT_CONTEXT },
+  });
   const rows = (data as { data?: { index?: number; embedding?: unknown }[] } | null)?.data;
   if (!Array.isArray(rows) || rows.length !== texts.length) return null;
   const out: number[][] = new Array(texts.length);
@@ -90,14 +115,35 @@ export async function embed(settings: LocalSettings, texts: string[]): Promise<n
 export async function chatJson<T>(settings: LocalSettings, system: string, user: string, check: (v: unknown) => v is T): Promise<T | null> {
   const data = await post(settings, "/chat/completions", {
     model: await resolveModel(settings, settings.chatModel), temperature: 0,
+    max_tokens: settings.maxTokens ?? DEFAULT_MAX_TOKENS,
+    options: { num_ctx: settings.contextTokens ?? DEFAULT_CONTEXT },
     messages: [{ role: "system", content: system }, { role: "user", content: user }],
     response_format: { type: "json_object" },
   });
-  const content = (data as { choices?: { message?: { content?: unknown } }[] } | null)?.choices?.[0]?.message?.content;
-  if (typeof content !== "string") return null;
+  const message = (data as { choices?: { message?: { content?: unknown; reasoning?: unknown } }[] } | null)?.choices?.[0]?.message;
+  const content = typeof message?.content === "string" ? message.content : "";
+  if (!content.trim()) {
+    // A thinking model that ran out of budget says nothing and thinks a lot. Say so,
+    // rather than "the model did not answer".
+    const thought = typeof message?.reasoning === "string" ? message.reasoning : "";
+    if (thought.trim()) throw new ThinkingModelError();
+    return null;
+  }
   let parsed: unknown;
   try { parsed = JSON.parse(content); } catch { return null; }
   return check(parsed) ? parsed : null;
+}
+
+/**
+ * The model used its whole answer thinking and never got to the answer. It is not a
+ * broken setup: it is a model that needs a bigger budget, or one that answers straight
+ * away.
+ */
+export class ThinkingModelError extends Error {
+  constructor() {
+    super("The model spent its whole budget thinking and never answered. A model that answers straight away — qwen2.5, for one — will be far quicker, or give the model a bigger budget in Settings.");
+    this.name = "ThinkingModelError";
+  }
 }
 
 /** Checks the model is there and answers, without asking it anything hard. */
@@ -185,14 +231,16 @@ export async function resolveModel(settings: LocalSettings, name: string): Promi
  * Checks the model properly: the chat endpoint and the embeddings endpoint, one at a time,
  * so the answer says which of them is the problem.
  */
-export async function testModel(settings: LocalSettings): Promise<ModelCheck> {
+export async function testModel(settings: LocalSettings): Promise<ModelCheck & { seconds: number }> {
   if (!isLocalBase(settings.base)) {
-    return { ok: false, chat: false, embed: false, message: "That address is not on this computer.", fix: "Use localhost or 127.0.0.1." };
+    return { ok: false, chat: false, embed: false, message: "That address is not on this computer.", fix: "Use localhost or 127.0.0.1.", seconds: 0 };
   }
+  const started = Date.now();
   const chat = await post({ ...settings, enabled: true }, "/chat/completions", {
-    model: settings.chatModel, temperature: 0, max_tokens: 256,
+    model: await resolveModel(settings, settings.chatModel), temperature: 0, max_tokens: 256,
     messages: [{ role: "user", content: "Reply with the single word: ready" }],
   });
+  const seconds = Math.round((Date.now() - started) / 1000);
   const message = (chat as { choices?: { message?: { content?: unknown; reasoning?: unknown } }[] } | null)?.choices?.[0]?.message;
   const said = typeof message?.content === "string" ? message.content : "";
   // A thinking model spends its first tokens reasoning, and can run out of room before
@@ -203,17 +251,19 @@ export async function testModel(settings: LocalSettings): Promise<ModelCheck> {
   const embed = await post({ ...settings, enabled: true }, "/embeddings", { model: settings.embedModel, input: ["ready"] });
   const embedOk = Array.isArray((embed as { data?: unknown[] } | null)?.data);
 
-  if (chatOk && embedOk) return { ok: true, chat: true, embed: true, message: `Everything works. The model answered “${(said || "yes").trim().slice(0, 40)}”.`, fix: null };
-  if (chatOk) return { ok: true, chat: true, embed: false, message: "The model answers, but it cannot turn text into vectors.", fix: `Pull the embedding model: ollama pull ${settings.embedModel}` };
-  if (embedOk) return { ok: true, chat: false, embed: true, message: "The model can turn text into vectors, but it does not answer.", fix: `Pull the chat model: ollama pull ${settings.chatModel}` };
+  const slow = seconds > 20 ? ` It took ${seconds} seconds, so the model is slow: a thinking model (qwen3 and its family) fills its context before it answers, and a smaller one that answers straight away will feel much better.` : "";
+  if (chatOk && embedOk) return { ok: true, chat: true, embed: true, message: `Everything works. The model answered “${(said || "yes").trim().slice(0, 40)}” in ${seconds} seconds.${slow}`, fix: null, seconds };
+  if (chatOk) return { ok: true, chat: true, embed: false, message: "The model answers, but it cannot turn text into vectors.", fix: `Pull the embedding model: ollama pull ${settings.embedModel}`, seconds };
+  if (embedOk) return { ok: true, chat: false, embed: true, message: "The model can turn text into vectors, but it does not answer.", fix: `Pull the chat model: ollama pull ${settings.chatModel}`, seconds };
   // Say what the server does have, so the fix is a name to type rather than a guess.
   const models = await listModels(settings);
   return {
     ok: false, chat: false, embed: false,
-    message: "Nothing answered on that address.",
+    message: `Nothing answered on that address${seconds ? ` after ${seconds} seconds` : ""}.`,
     fix: models?.length
       ? `The server has ${models.join(", ")}. Is the model called “${settings.chatModel}”?`
       : `Is the model server running, and is it called “${settings.chatModel}”?`,
+    seconds,
   };
 }
 

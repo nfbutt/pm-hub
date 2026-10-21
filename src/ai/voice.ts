@@ -52,3 +52,30 @@ export const say = speak;
 export function stopSpeaking() {
   if (typeof speechSynthesis !== "undefined") speechSynthesis.cancel();
 }
+
+/** What the speech server can do, and how to start it. */
+export interface SpeechCheck {
+  ok: boolean;
+  message: string;
+  fix: string | null;
+}
+
+/**
+ * Is there a speech server on this computer? The microphone needs one, and it is a
+ * different program from the chat model — Ollama does not transcribe.
+ */
+export async function testSpeech(settings: LocalSettings): Promise<SpeechCheck> {
+  const base = settings.voiceBase || DEFAULT_VOICE_BASE;
+  if (!isLocalBase(base)) return { ok: false, message: "The speech address is not on this computer.", fix: "Use localhost or 127.0.0.1." };
+  try {
+    const res = await fetch(`${trimSlash(base)}/models`, { method: "GET" });
+    if (!res.ok) throw new Error("no");
+    return { ok: true, message: "The speech server is there and the microphone can work.", fix: null };
+  } catch {
+    return {
+      ok: false,
+      message: `Nothing is answering at ${base}.`,
+      fix: "Start a speech server there, for example: docker run -p 8000:8000 ghcr.io/speaches-ai/speaches:latest",
+    };
+  }
+}

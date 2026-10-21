@@ -1,7 +1,7 @@
 // The microphone button. It records what you say, sends it to the transcription server on
 // this computer, and puts the words where they belong.
 import { useEffect, useRef, useState } from "react";
-import { transcribe } from "../../ai/voice";
+import { testSpeech, transcribe } from "../../ai/voice";
 import type { LocalSettings } from "../../ai/local";
 
 /** Longest a recording can run, so a forgotten microphone cannot record for ever. */
@@ -17,6 +17,8 @@ export function VoiceInput({ value, onChange, settings, placeholder, id, autoFoc
 }) {
   const [state, setState] = useState<"idle" | "listening" | "working" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
+  /** What was heard, so the words are never lost. */
+  const [heard, setHeard] = useState<string | null>(null);
   const recorder = useRef<MediaRecorder | null>(null);
   const chunks = useRef<Blob[]>([]);
   const timer = useRef<number | null>(null);
@@ -27,6 +29,10 @@ export function VoiceInput({ value, onChange, settings, placeholder, id, autoFoc
     if (state === "listening") { recorder.current?.stop(); return; }
     setError(null);
     if (!navigator.mediaDevices?.getUserMedia) { setError("This browser cannot record audio."); setState("error"); return; }
+    // Check the speech server before recording, so nobody talks for a minute into a
+    // server that is not there.
+    const check = await testSpeech(settings);
+    if (!check.ok) { setError(`${check.message} ${check.fix ?? ""}`.trim()); setState("error"); return; }
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -43,11 +49,13 @@ export function VoiceInput({ value, onChange, settings, placeholder, id, autoFoc
       setState("working");
       const text = await transcribe(settings, new Blob(chunks.current, { type: rec.mimeType }));
       if (text === null) {
-        setError("No transcription came back. Is the speech server running on this computer?");
+        const check = await testSpeech(settings);
+        setError(`No words came back. ${check.fix ?? "Is the speech server running on this computer?"}`);
         setState("error");
         return;
       }
       setState("idle");
+      setHeard(text.trim());
       onChange(value ? `${value.trim()} ${text.trim()}` : text.trim());
     };
     rec.start();
@@ -69,6 +77,8 @@ export function VoiceInput({ value, onChange, settings, placeholder, id, autoFoc
         </button>
       </div>
       {state === "listening" && <span className="muted" style={{ fontSize: 12 }}>Listening… click the square to stop.</span>}
+      {state === "working" && <span className="muted" style={{ fontSize: 12 }}>Turning the recording into words…</span>}
+      {heard && <span className="muted" style={{ fontSize: 12 }}>Heard: “{heard}”</span>}
       {error && <span className="muted" style={{ fontSize: 12, color: "var(--bad)" }}>{error}</span>}
     </div>
   );
