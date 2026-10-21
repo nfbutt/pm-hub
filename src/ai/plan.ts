@@ -65,3 +65,37 @@ export function checkPlan(v: unknown): v is PlanDraft {
     return epic.stories.every(s => typeof s === "object" && s !== null && typeof (s as { title?: unknown }).title === "string");
   });
 }
+
+export const SYSTEM_EPIC = [
+  "You plan one piece of work: a title, a description, and the tasks that make it up.",
+  "You use only the releases you are given, and you answer with JSON only.",
+].join(" ");
+
+/** Asks for one epic: what it is, what it is for, and the work it needs. */
+export function promptEpic(description: string, releases: string[], labels: string[], today: string): string {
+  return [
+    "Here is what someone wants to build.",
+    "",
+    description.trim(),
+    "",
+    `Today is ${today}. A start date is not before today.`,
+    releases.length ? `The releases you may use: ${releases.join(", ")}` : "There are no releases yet, so leave the release empty.",
+    labels.length ? `The labels in use: ${labels.join(", ")}` : "",
+    "",
+    "Write one epic: a short title, a description of what it is and what it is for, and the work that makes it up.",
+    'Answer with {"title": "...", "summary": "a paragraph describing the epic and what it is for",',
+    '"release": null, "start": "2026-01-01", "end": "2026-02-01",',
+    '"stories": [{"title": "...", "why": "one line", "days": 3, "best": 2, "worst": 6}]}.',
+    "Give three to six stories. Each one is a piece of work that can be done on its own.",
+  ].filter(Boolean).join("\n");
+}
+
+/** Keeps only an answer that is one epic with stories. */
+export function checkEpic(v: unknown): v is { title: string; summary: string; release: string | null; start: string | null; end: string | null; stories: { title: string; why: string; days: number; best?: number; worst?: number }[] } {
+  if (typeof v !== "object" || v === null) return false;
+  const e = v as Record<string, unknown>;
+  if (typeof e.title !== "string" || !e.title.trim()) return false;
+  if (typeof e.summary !== "string" || !e.summary.trim()) return false;
+  if (!Array.isArray(e.stories) || !e.stories.length || e.stories.length > 12) return false;
+  return e.stories.every(s => typeof s === "object" && s !== null && typeof (s as { title?: unknown }).title === "string");
+}

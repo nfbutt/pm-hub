@@ -37,6 +37,8 @@ export function estimate(story: DraftStory): { expected: number; low: number; hi
 export interface DraftEpic {
   title: string;
   why: string;
+  /** The description of the epic, which becomes the issue body. */
+  summary?: string;
   /** The release it belongs to, by name. */
   release: string | null;
   /** The dates, as ISO days. */
@@ -165,7 +167,8 @@ export function draftOps(project: Project, mapping: Mapping, draft: PlanDraft): 
       if (opt) fields[releaseField] = { kind: "single", name: opt.name, optionId: opt.id };
     }
     const key = keys.get(e.title)!;
-    ops.push({ kind: "create", key, item: { title: e.title, repo, parentKey: null, labels: epicLabel ? [epicLabel] : [], fields } });
+    const body = [e.summary, e.why && `Why: ${e.why}`].filter(Boolean).join("\n\n");
+    ops.push({ kind: "create", key, item: { title: e.title, ...(body ? { body } : {}), repo, parentKey: null, labels: epicLabel ? [epicLabel] : [], fields } });
 
     // A release that is a milestone cannot be a field value, so it is set afterwards.
     if (e.release && mapping.release.kind === "milestone") {

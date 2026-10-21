@@ -21,6 +21,7 @@ import { Roadmap } from "./Roadmap";
 import { Planner } from "./Planner";
 import { Compare } from "./Compare";
 import { GlobalMic } from "./voice/GlobalMic";
+import { AiStatus } from "./ai/AiStatus";
 import { say } from "../ai/voice";
 import { useDictation } from "./voice/useDictation";
 import { Overview } from "./Overview";
@@ -139,6 +140,7 @@ export function ProjectScreen({ source, view, onSignOut }: { source: Source; vie
     <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
       {project && cs.ready && <ChangeBar cs={cs} githubOnly={githubOnly} setGithubOnly={setGithubOnly} reviewHref={hrefFor(routeFor("review"))} />}
       <GlobalMic settings={prefs.local} />
+      <AiStatus settings={prefs.local} settingsHref={hrefFor(routeFor("settings"))} />
       {source.kind === "github" && (
         <>
           {rate && rate.remaining < 500 && (

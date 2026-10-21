@@ -112,6 +112,43 @@ export async function testConnection(settings: LocalSettings): Promise<{ ok: boo
   return { ok: true, message: `The model answered: “${content.trim().slice(0, 60)}”` };
 }
 
+/** What the model can and cannot do. */
+export interface ModelCheck {
+  ok: boolean;
+  /** The model answers questions. */
+  chat: boolean;
+  /** The model can turn text into vectors. */
+  embed: boolean;
+  /** One line, in words a person can act on. */
+  message: string;
+  /** What to do about it, when there is something to do. */
+  fix: string | null;
+}
+
+/**
+ * Checks the model properly: the chat endpoint and the embeddings endpoint, one at a time,
+ * so the answer says which of them is the problem.
+ */
+export async function testModel(settings: LocalSettings): Promise<ModelCheck> {
+  if (!isLocalBase(settings.base)) {
+    return { ok: false, chat: false, embed: false, message: "That address is not on this computer.", fix: "Use localhost or 127.0.0.1." };
+  }
+  const chat = await post({ ...settings, enabled: true }, "/chat/completions", {
+    model: settings.chatModel, temperature: 0, max_tokens: 16,
+    messages: [{ role: "user", content: "Reply with the single word: ready" }],
+  });
+  const said = (chat as { choices?: { message?: { content?: unknown } }[] } | null)?.choices?.[0]?.message?.content;
+  const chatOk = typeof said === "string";
+
+  const embed = await post({ ...settings, enabled: true }, "/embeddings", { model: settings.embedModel, input: ["ready"] });
+  const embedOk = Array.isArray((embed as { data?: unknown[] } | null)?.data);
+
+  if (chatOk && embedOk) return { ok: true, chat: true, embed: true, message: `Everything works. The model answered “${String(said).trim().slice(0, 40)}”.`, fix: null };
+  if (chatOk) return { ok: true, chat: true, embed: false, message: "The model answers, but it cannot turn text into vectors.", fix: `Pull the embedding model: ollama pull ${settings.embedModel}` };
+  if (embedOk) return { ok: true, chat: false, embed: true, message: "The model can turn text into vectors, but it does not answer.", fix: `Pull the chat model: ollama pull ${settings.chatModel}` };
+  return { ok: false, chat: false, embed: false, message: "Nothing answered on that address.", fix: `Is the model server running, and is it called “${settings.chatModel}”?` };
+}
+
 // ---------------------------------------------------------------- answers
 
 export interface CategoryMix { name: string }

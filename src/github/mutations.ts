@@ -58,8 +58,8 @@ mutation RemoveLabels($labelableId: ID!, $labelIds: [ID!]!) {
 }`;
 
 export const CREATE_ISSUE = `
-mutation CreateIssue($repositoryId: ID!, $title: String!, $labelIds: [ID!], $parentIssueId: ID) {
-  createIssue(input: { repositoryId: $repositoryId, title: $title, labelIds: $labelIds, parentIssueId: $parentIssueId }) { issue { id number url } }
+mutation CreateIssue($repositoryId: ID!, $title: String!, $body: String, $labelIds: [ID!], $parentIssueId: ID) {
+  createIssue(input: { repositoryId: $repositoryId, title: $title, body: $body, labelIds: $labelIds, parentIssueId: $parentIssueId }) { issue { id number url } }
 }`;
 
 export const ADD_TO_PROJECT = `
