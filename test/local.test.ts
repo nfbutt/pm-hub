@@ -48,7 +48,11 @@ describe("the local client", () => {
     });
     const vectors = await embed(settings, ["ab", "cde"]);
     expect(vectors).toEqual([[2, 0], [3, 1]]);
-    expect(mock.mock.calls[0]![0]).toBe("http://localhost:11434/v1/embeddings");
+    // The client asks the server what it has first, so the name it was given can be
+    // matched to the one it actually uses.
+    const urls = mock.mock.calls.map(c => c[0]);
+    expect(urls).toContain("http://localhost:11434/v1/models");
+    expect(urls).toContain("http://localhost:11434/v1/embeddings");
   });
 
   it("drops an answer that is not the shape it should be", async () => {
