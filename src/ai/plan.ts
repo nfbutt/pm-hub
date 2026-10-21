@@ -99,3 +99,41 @@ export function checkEpic(v: unknown): v is { title: string; summary: string; re
   if (!Array.isArray(e.stories) || !e.stories.length || e.stories.length > 12) return false;
   return e.stories.every(s => typeof s === "object" && s !== null && typeof (s as { title?: unknown }).title === "string");
 }
+
+export const SYSTEM_AMEND = [
+  "You tidy one piece of work: what it is missing, what is named badly, and which of its stories repeat each other.",
+  "You only use the story keys you are given, and you answer with JSON only.",
+].join(" ");
+
+/** Asks what an epic is missing, and what could be tidied. */
+export function promptAmend(epic: { title: string; body: string }, stories: { key: string; title: string; body: string }[], releases: string[]): string {
+  return [
+    `Epic: ${epic.title}`,
+    epic.body ? `What it is for: ${epic.body}` : "",
+    "",
+    "Its stories:",
+    ...stories.map(s => `  ${s.key} | ${s.title}${s.body ? `: ${s.body}` : ""}`),
+    "",
+    releases.length ? `The releases you may use: ${releases.join(", ")}` : "",
+    "",
+    "Say what is missing, what is named badly, and which two stories look like the same work.",
+    'Answer with {"add": [{"title": "...", "why": "one line", "days": 3}],',
+    '"rename": [{"key": "<story key>", "from": "<its title>", "to": "<a better title>", "why": "one line"}],',
+    '"overlap": [{"keys": ["<key>", "<key>"], "titles": ["<title>", "<title>"], "why": "one line"}]}.',
+    "Only suggest a story that is really missing, and only rename when the new name says something the old one does not.",
+  ].filter(Boolean).join("\n");
+}
+
+/** Keeps only an answer that names real stories and sensible changes. */
+export function checkAmend(v: unknown): v is { add: { title: string; why: string; days: number }[]; rename: { key: string; from: string; to: string; why: string }[]; overlap: { keys: string[]; titles: string[]; why: string }[] } {
+  if (typeof v !== "object" || v === null) return false;
+  const a = v as Record<string, unknown>;
+  if (!Array.isArray(a.add) || !Array.isArray(a.rename) || !Array.isArray(a.overlap)) return false;
+  if (a.add.length > 10 || a.rename.length > 10 || a.overlap.length > 6) return false;
+  const add = a.add.every(s => typeof s === "object" && s !== null && typeof (s as { title?: unknown }).title === "string" && (s as { title: string }).title.trim().length > 0);
+  const rename = a.rename.every(r => typeof r === "object" && r !== null
+    && typeof (r as { key?: unknown }).key === "string" && typeof (r as { to?: unknown }).to === "string" && (r as { to: string }).to.trim().length > 0);
+  const overlap = a.overlap.every(o => typeof o === "object" && o !== null && Array.isArray((o as { keys?: unknown }).keys)
+    && (o as { keys: unknown[] }).keys.length === 2 && (o as { keys: unknown[] }).keys.every(k => typeof k === "string"));
+  return add && rename && overlap;
+}
