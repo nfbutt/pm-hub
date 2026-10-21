@@ -1,7 +1,7 @@
 import { labelPrefixes, type LaneRule, type Mapping, type ReleaseRule } from "../model/mapping";
 import type { Project } from "../model/normalize";
 import type { Prefs } from "../store/cache";
-import { DEFAULT_VOICE_BASE, defaultLocal, listModels, testModel, type ModelCheck } from "../ai/local";
+import { DEFAULT_VOICE_BASE, defaultLocal, forgetModels, listModels, testModel, type ModelCheck } from "../ai/local";
 import { useState } from "react";
 import type { ReactNode } from "react";
 
@@ -32,6 +32,7 @@ export function Settings({ project, mapping, setMapping, resetMapping, prefs, se
   const [listing, setListing] = useState(false);
   const findModels = async () => {
     setListing(true);
+    forgetModels();
     const found = await listModels(local);
     setInstalled(found);
     setListing(false);
@@ -158,7 +159,7 @@ export function Settings({ project, mapping, setMapping, resetMapping, prefs, se
         </label>
         <div className="setting">
           <label htmlFor="ai-base">Address</label>
-          <input id="ai-base" className="input" value={local.base} onChange={e => setLocal({ base: e.target.value })}
+          <input id="ai-base" className="input" value={local.base} onChange={e => { forgetModels(); setLocal({ base: e.target.value }); }}
             placeholder="http://localhost:11434/v1" />
           <span className="muted">An OpenAI-compatible endpoint, e.g. Ollama or LM Studio.</span>
         </div>

@@ -7,7 +7,7 @@ import { detectMapping } from "../src/model/mapping";
 import { applyOps } from "../src/model/ops";
 import { newItem } from "../src/model/edits";
 import { checkDraft, draftOps } from "../src/model/plan/draft";
-import { listModels, testModel, type LocalSettings } from "../src/ai/local";
+import { listModels, resolveModel, testModel, type LocalSettings } from "../src/ai/local";
 import { checkEpic, promptEpic } from "../src/ai/plan";
 
 const f = makeFixture("2026-10-19");
@@ -135,5 +135,37 @@ describe("checking the model", () => {
     vi.stubGlobal("fetch", mock);
     expect(await listModels({ ...settings, base: "https://api.openai.com/v1" })).toBeNull();
     expect(mock).not.toHaveBeenCalled();
+  });
+});
+
+describe("finding the model the server actually has", () => {
+  const settings: LocalSettings = { enabled: true, base: "http://localhost:11434/v1", chatModel: "qwen3", embedModel: "qwen3-embedding", voiceBase: "http://localhost:8000/v1", voiceModel: "whisper-1" };
+  afterEach(() => vi.unstubAllGlobals());
+
+  const withModels = (models: string[], base = "http://localhost:11434/v1") => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ data: models.map(id => ({ id })) }) })));
+    return { ...settings, base };
+  };
+
+  it("finds the model when only the family name was written", async () => {
+    withModels(["qwen3:8b", "qwen3-embedding:0.6b"], "http://localhost:9010/v1");
+    const local = { ...settings, base: "http://localhost:9010/v1" };
+    expect(await resolveModel(local, "qwen3")).toBe("qwen3:8b");
+    expect(await resolveModel(local, "qwen3-embedding")).toBe("qwen3-embedding:0.6b");
+  });
+
+  it("takes the smallest of a family, so a name never drags in a huge model", async () => {
+    withModels(["qwen3-embedding:0.6b", "qwen3-embedding:4b", "qwen3-embedding:8b"], "http://localhost:1234/v1");
+    expect(await resolveModel({ ...settings, base: "http://localhost:1234/v1" }, "qwen3-embedding")).toBe("qwen3-embedding:0.6b");
+  });
+
+  it("leaves a name alone when the server has it", async () => {
+    withModels(["qwen3:8b"], "http://localhost:2345/v1");
+    expect(await resolveModel({ ...settings, base: "http://localhost:2345/v1" }, "qwen3:8b")).toBe("qwen3:8b");
+  });
+
+  it("leaves a name alone when the server cannot be asked", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("no"); }));
+    expect(await resolveModel({ ...settings, base: "http://localhost:3456/v1" }, "qwen3")).toBe("qwen3");
   });
 });

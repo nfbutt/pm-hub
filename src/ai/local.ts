@@ -23,7 +23,7 @@ export const DEFAULT_VOICE_BASE = "http://localhost:8000/v1";
 export const DEFAULT_VOICE_MODEL = "whisper-1";
 
 export const defaultLocal: LocalSettings = {
-  enabled: false, base: "http://localhost:11434/v1", chatModel: "qwen3", embedModel: "qwen3-embedding",
+  enabled: false, base: "http://localhost:11434/v1", chatModel: "qwen3", embedModel: "qwen3-embedding:0.6b",
   voiceBase: DEFAULT_VOICE_BASE, voiceModel: DEFAULT_VOICE_MODEL,
 };
 
@@ -70,7 +70,7 @@ async function post(settings: LocalSettings, path: string, body: unknown): Promi
  */
 export async function embed(settings: LocalSettings, texts: string[]): Promise<number[][] | null> {
   if (!texts.length) return [];
-  const data = await post(settings, "/embeddings", { model: settings.embedModel, input: texts });
+  const data = await post(settings, "/embeddings", { model: await resolveModel(settings, settings.embedModel), input: texts });
   const rows = (data as { data?: { index?: number; embedding?: unknown }[] } | null)?.data;
   if (!Array.isArray(rows) || rows.length !== texts.length) return null;
   const out: number[][] = new Array(texts.length);
@@ -89,7 +89,7 @@ export async function embed(settings: LocalSettings, texts: string[]): Promise<n
  */
 export async function chatJson<T>(settings: LocalSettings, system: string, user: string, check: (v: unknown) => v is T): Promise<T | null> {
   const data = await post(settings, "/chat/completions", {
-    model: settings.chatModel, temperature: 0,
+    model: await resolveModel(settings, settings.chatModel), temperature: 0,
     messages: [{ role: "system", content: system }, { role: "user", content: user }],
     response_format: { type: "json_object" },
   });
@@ -128,12 +128,16 @@ export interface ModelCheck {
   fix: string | null;
 }
 
+/** The models a server has, remembered for a minute so we do not ask on every call. */
+let modelCache: { at: number; base: string; models: string[] } | null = null;
+
 /**
  * The models a local server has. The names it uses are not always the ones you would
  * guess — "qwen3" is not the same as "qwen3:8b" — so it is better to ask.
  */
 export async function listModels(settings: LocalSettings): Promise<string[] | null> {
   if (!isLocalBase(settings.base)) return null;
+  if (modelCache && modelCache.base === settings.base && Date.now() - modelCache.at < 60000) return modelCache.models;
   try {
     const res = await fetch(`${trimSlash(settings.base)}/models`);
     if (!res.ok) return null;
@@ -141,10 +145,40 @@ export async function listModels(settings: LocalSettings): Promise<string[] | nu
     const rows = (data as { data?: { id?: unknown }[] }).data;
     if (!Array.isArray(rows)) return null;
     const ids = rows.map(r => r?.id).filter((id): id is string => typeof id === "string");
-    return ids.length ? ids : null;
+    if (!ids.length) return null;
+    modelCache = { at: Date.now(), base: settings.base, models: ids };
+    return ids;
   } catch {
     return null;
   }
+}
+
+/** How big a model is, from its tag: "qwen3:8b" is eight. */
+const sizeOf = (name: string): number => {
+  const m = name.split(":")[1]?.match(/([0-9.]+)\s*([bm])/i);
+  if (!m) return Number.MAX_SAFE_INTEGER;
+  const n = Number(m[1]);
+  return m[2]!.toLowerCase() === "m" ? n / 1000 : n;
+};
+
+/** Forgets the remembered list, so a newly pulled model is found straight away. */
+export function forgetModels() { modelCache = null; }
+
+/**
+ * The name to use for a model: the one asked for, or the closest the server actually
+ * has. Servers tag their models ("qwen3:8b"), and people write the family name
+ * ("qwen3"), which the server does not know.
+ */
+export async function resolveModel(settings: LocalSettings, name: string): Promise<string> {
+  if (!settings.enabled || !isLocalBase(settings.base)) return name;
+  const models = await listModels(settings);
+  if (!models || models.includes(name)) return name;
+  const base = name.split(":")[0]!;
+  const same = models.filter(m => m === name || m.split(":")[0] === base);
+  if (!same.length) return name;
+  // Several sizes of the same family: take the smallest, so a name never drags a
+  // sixteen gigabyte model into every call.
+  return same.sort((a, b) => sizeOf(a) - sizeOf(b))[0]!;
 }
 
 /**

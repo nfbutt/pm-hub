@@ -85,6 +85,8 @@ There is a pill in the top bar that says so: **AI off**, **AI ready**, or **AI n
 
 In *Settings → Local model*, **What does the server have?** asks the server for its models and lets you put any of them in the chat or the embeddings field. It is worth doing once: the name the server uses is often not the name you would guess — `qwen3` is not `qwen3:8b`.
 
+pm-hub also matches a name to the closest one the server has, so a family name (`qwen3`) finds the model you actually installed (`qwen3:8b`) and a family with several sizes takes the smallest. The default embedding model is `qwen3-embedding:0.6b` — 1024 dimensions in 639 MB, rather than the 4.7 GB behind the `latest` tag.
+
 ### A model on your own computer (optional)
 
 The Epic Map and the Roadmap can ask a model running on **your** machine to compare work by meaning, name what an epic is really about, explain an overlap, suggest epics that are missing, and say which items really block each other. It is off until you turn it on in *Settings → Local model*.
