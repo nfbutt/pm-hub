@@ -11,12 +11,14 @@ const SCOPES = ["project", "repo", "read:org"];
 /** What GitHub's tokens look like, so a paste of the wrong thing is caught before a request. */
 const looksLikeToken = (t: string) => /^(ghp_|github_pat_|gho_|ghu_)[A-Za-z0-9_]{20,}$/.test(t);
 
-export function Connect({ onConnected, rejected = false, target = null }: {
+export function Connect({ onConnected, rejected = false, target = null, onCancel }: {
   onConnected: (token: string) => void;
   /** GitHub turned the saved token down: it expired or was revoked. */
   rejected?: boolean;
   /** The project the link was for, so the page can say where the person is going. */
   target?: { owner: string; number: number } | null;
+  /** There is a working token already: the person chose to replace it, and may change their mind. */
+  onCancel?: () => void;
 }) {
   const [token, setToken] = useState("");
   const [remember, setRemember] = useState(false);
@@ -65,7 +67,7 @@ export function Connect({ onConnected, rejected = false, target = null }: {
       <main className="connect">
         <div className="connect-intro">
           {target && <span className="target">Opening <b>{target.owner}</b> · project #{target.number}</span>}
-          <h1>{target ? "Connect GitHub to open this project" : "Roadmaps and forecasts for your GitHub Projects"}</h1>
+          <h1>{onCancel ? "Replace your GitHub token" : target ? "Connect GitHub to open this project" : "Roadmaps and forecasts for your GitHub Projects"}</h1>
           <p className="lede">
             pm-hub reads a GitHub Project and draws its roadmap, Gantt chart, release forecasts and dependencies. It runs in
             your browser: the token goes only to api.github.com, and nothing is stored on a server.
@@ -86,7 +88,7 @@ export function Connect({ onConnected, rejected = false, target = null }: {
             <section className={`cstep ${pasted ? "done" : "now"}`}>
               <span className="cstep-n" aria-hidden="true">1</span>
               <div className="cstep-body">
-                <h2>{rejected ? "Create a new token on GitHub" : "Create a token on GitHub"}</h2>
+                <h2>{rejected || onCancel ? "Create a new token on GitHub" : "Create a token on GitHub"}</h2>
                 <p className="muted">
                   {opened
                     ? "Pick an expiry, press Generate token at the bottom of the page, then copy the token. GitHub only shows it once."
@@ -125,10 +127,11 @@ export function Connect({ onConnected, rejected = false, target = null }: {
                     </span>
                   </div>
                 )}
-                <span>
+                <span style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <button className={`btn ${pasted ? "primary" : ""}`} type="submit" disabled={busy || !pasted}>
-                    {busy ? "Checking…" : target ? "Connect and open the project" : "Connect"}
+                    {busy ? "Checking…" : onCancel ? "Use the new token" : target ? "Connect and open the project" : "Connect"}
                   </button>
+                  {onCancel && <button type="button" className="btn ghost" onClick={onCancel}>Keep the current token</button>}
                 </span>
               </div>
             </section>

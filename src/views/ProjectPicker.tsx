@@ -6,7 +6,9 @@ import { hrefFor } from "../router";
 import { TopBar } from "../ui/TopBar";
 import { UserMenu } from "../ui/UserMenu";
 
-export function ProjectPicker({ client, onSignOut, onTokenRejected }: { client: GitHubClient; onSignOut: () => void; onTokenRejected?: () => void }) {
+export function ProjectPicker({ client, onSignOut, onTokenRejected, onChangeToken }: {
+  client: GitHubClient; onSignOut: () => void; onTokenRejected?: () => void; onChangeToken?: () => void;
+}) {
   const [state, setState] = useState<{ viewer: Viewer; projects: ProjectSummary[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showClosed, setShowClosed] = useState(false);
@@ -30,7 +32,7 @@ export function ProjectPicker({ client, onSignOut, onTokenRejected }: { client: 
 
   return (
     <>
-      <TopBar right={state && <UserMenu viewer={state.viewer} onSignOut={onSignOut} />} />
+      <TopBar right={state && <UserMenu viewer={state.viewer} onSignOut={onSignOut} onChangeToken={onChangeToken} />} />
       <main className="page narrow">
         <div className="section-h" style={{ marginTop: 12 }}>
           <h1 style={{ fontSize: 24, fontWeight: 800 }}>Choose a project</h1>

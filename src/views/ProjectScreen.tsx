@@ -76,10 +76,12 @@ const GROUPS: { label: string; views: { id: ViewId; label: string }[] }[] = [
 /** Every view in order, for the command menu. Review is reached from the change count. */
 const TABS = GROUPS.flatMap(g => g.views).filter(v => v.id !== "review");
 
-export function ProjectScreen({ source, view, onSignOut, onTokenRejected }: {
+export function ProjectScreen({ source, view, onSignOut, onTokenRejected, onChangeToken }: {
   source: Source; view: ViewId; onSignOut?: () => void;
   /** GitHub turned the token down: ask for a new one, and come back to this view. */
   onTokenRejected?: () => void;
+  /** Replace the token by choice, before or after it expires. */
+  onChangeToken?: () => void;
 }) {
   const state = useProject(source);
   const { project, mapping, loading, progress, error, errorKind } = state;
@@ -201,6 +203,7 @@ export function ProjectScreen({ source, view, onSignOut, onTokenRejected }: {
       <div className="nav-foot">
         <ThemeToggle />
         <a className="nav-link" href="#/">All projects</a>
+        {onChangeToken && <button className="nav-link" onClick={onChangeToken}>Change GitHub token</button>}
         {onSignOut && <button className="nav-link" onClick={onSignOut}>Sign out</button>}
       </div>
     </aside>
