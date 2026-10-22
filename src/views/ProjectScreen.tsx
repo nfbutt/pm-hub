@@ -1,69 +1,95 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { buildSchedule, emptyDraft } from "../model/schedule";
 import { setDatesWithDependents, shiftDates } from "../model/edits";
 import { addDays } from "../model/mapping";
 import { CommandMenu } from "../ui/CommandMenu";
 import { Plan } from "./Plan";
-import { Review } from "./Review";
 import { ChangeBar } from "../ui/ChangeBar";
 import { UndoToast } from "../ui/Toast";
 import { hrefFor, type Route, type ViewId } from "../router";
 import { readPrefs, writePrefs, type Prefs } from "../store/cache";
 import { TopBar } from "../ui/TopBar";
-import { UserMenu } from "../ui/UserMenu";
 import { DEMO_OWNER } from "../demo/fixture";
 import { Gantt } from "./Gantt";
-import { BurnUp } from "./BurnUp";
-import { Confidence } from "./Confidence";
-import { Dependencies } from "./Dependencies";
-import { EpicMap } from "./EpicMap";
-import { Roadmap } from "./Roadmap";
-import { Planner } from "./Planner";
-import { Compare } from "./Compare";
 import { GlobalMic } from "./voice/GlobalMic";
 import { ThemeToggle } from "../ui/Theme";
 import { AiStatus } from "./ai/AiStatus";
 import { say } from "../ai/voice";
 import { useDictation } from "./voice/useDictation";
 import { Overview } from "./Overview";
-import { Progress } from "./Progress";
-import { Schedule } from "./Schedule";
-import { Workload } from "./Workload";
-import { Releases } from "./Releases";
-import { Settings } from "./Settings";
-import { Ai } from "./Ai";
-import { Changes } from "./Changes";
-import { HistorySettings } from "./HistorySettings";
 import { useHistory } from "./useHistory";
 import type { Baseline } from "../model/diff";
 import { useChangeSet } from "./useChangeSet";
 import { useProject, type Source } from "./useProject";
 
-/** Views that exist so far, in tab order. Later phases add to this list. */
-const TABS: { id: ViewId; label: string }[] = [
-  { id: "overview", label: "Overview" },
-  { id: "gantt", label: "Gantt" },
-  { id: "plan", label: "Plan" },
-  { id: "releases", label: "Releases" },
-  { id: "schedule", label: "Schedule" },
-  { id: "progress", label: "Progress" },
-  { id: "workload", label: "Status & workload" },
-  { id: "burnup", label: "Burn-up" },
-  { id: "confidence", label: "Release confidence" },
-  { id: "dependencies", label: "Dependencies" },
-  { id: "epics", label: "Epic Map" },
-  { id: "roadmap", label: "Roadmap" },
-  { id: "compare", label: "Compare" },
-  { id: "planner", label: "Planner" },
-  { id: "changes", label: "What changed" },
-  { id: "ai", label: "AI" },
-  { id: "settings", label: "Settings" },
-];
+// The views you land on (Overview, Gantt, Plan) come with the page; the rest load when
+// first opened, so the first visit downloads a fraction of the app.
+const Releases = lazy(() => import("./Releases").then(m => ({ default: m.Releases })));
+const Schedule = lazy(() => import("./Schedule").then(m => ({ default: m.Schedule })));
+const Progress = lazy(() => import("./Progress").then(m => ({ default: m.Progress })));
+const Workload = lazy(() => import("./Workload").then(m => ({ default: m.Workload })));
+const BurnUp = lazy(() => import("./BurnUp").then(m => ({ default: m.BurnUp })));
+const Confidence = lazy(() => import("./Confidence").then(m => ({ default: m.Confidence })));
+const Dependencies = lazy(() => import("./Dependencies").then(m => ({ default: m.Dependencies })));
+const EpicMap = lazy(() => import("./EpicMap").then(m => ({ default: m.EpicMap })));
+const Roadmap = lazy(() => import("./Roadmap").then(m => ({ default: m.Roadmap })));
+const Planner = lazy(() => import("./Planner").then(m => ({ default: m.Planner })));
+const Compare = lazy(() => import("./Compare").then(m => ({ default: m.Compare })));
+const Changes = lazy(() => import("./Changes").then(m => ({ default: m.Changes })));
+const Review = lazy(() => import("./Review").then(m => ({ default: m.Review })));
+const Ai = lazy(() => import("./Ai").then(m => ({ default: m.Ai })));
+const Settings = lazy(() => import("./Settings").then(m => ({ default: m.Settings })));
+const HistorySettings = lazy(() => import("./HistorySettings").then(m => ({ default: m.HistorySettings })));
 
-export function ProjectScreen({ source, view, onSignOut }: { source: Source; view: ViewId; onSignOut?: () => void }) {
+/** The views, grouped by what you are doing: laying out the plan, watching it run,
+ * reshaping it, and sending it to GitHub. */
+const GROUPS: { label: string; views: { id: ViewId; label: string }[] }[] = [
+  { label: "Plan", views: [
+    { id: "overview", label: "Overview" },
+    { id: "gantt", label: "Gantt" },
+    { id: "plan", label: "Plan" },
+    { id: "roadmap", label: "Roadmap" },
+    { id: "releases", label: "Releases" },
+    { id: "schedule", label: "Schedule" },
+  ] },
+  { label: "Track", views: [
+    { id: "progress", label: "Progress" },
+    { id: "workload", label: "Status & workload" },
+    { id: "burnup", label: "Burn-up" },
+    { id: "confidence", label: "Release confidence" },
+    { id: "dependencies", label: "Dependencies" },
+  ] },
+  { label: "Shape", views: [
+    { id: "epics", label: "Epic Map" },
+    { id: "planner", label: "Planner" },
+    { id: "compare", label: "Compare" },
+  ] },
+  { label: "Ship", views: [
+    { id: "review", label: "Review changes" },
+    { id: "changes", label: "What changed" },
+  ] },
+  { label: "Set up", views: [
+    { id: "ai", label: "AI" },
+    { id: "settings", label: "Settings" },
+  ] },
+];
+/** Every view in order, for the command menu. Review is reached from the change count. */
+const TABS = GROUPS.flatMap(g => g.views).filter(v => v.id !== "review");
+
+export function ProjectScreen({ source, view, onSignOut, onTokenRejected }: {
+  source: Source; view: ViewId; onSignOut?: () => void;
+  /** GitHub turned the token down: ask for a new one, and come back to this view. */
+  onTokenRejected?: () => void;
+}) {
   const state = useProject(source);
   const { project, mapping, loading, progress, error, errorKind } = state;
   const rate = source.kind === "github" ? source.client.state.rateLimit : null;
+  // A rejected token with nothing loaded leaves nothing to look at: go and make a new one.
+  // With a copy loaded, the copy stays on screen and the callout offers the same.
+  useEffect(() => {
+    if (errorKind === "auth" && !project && onTokenRejected) onTokenRejected();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [errorKind, project]);
   const owner = source.kind === "github" ? source.owner : DEMO_OWNER;
   const number = source.kind === "github" ? source.number : 1;
   const cs = useChangeSet(owner, number, project, mapping);
@@ -142,7 +168,6 @@ export function ProjectScreen({ source, view, onSignOut }: { source: Source; vie
   const right = (
     <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
       {project && cs.ready && <ChangeBar cs={cs} githubOnly={githubOnly} setGithubOnly={setGithubOnly} reviewHref={hrefFor(routeFor("review"))} />}
-      <ThemeToggle />
       <GlobalMic settings={prefs.local} />
       <AiStatus settings={prefs.local} settingsHref={hrefFor(routeFor("ai"))} />
       {source.kind === "github" && (
@@ -150,32 +175,47 @@ export function ProjectScreen({ source, view, onSignOut }: { source: Source; vie
           {rate && rate.remaining < 500 && (
             <span className="pill warn" title={`Resets at ${new Date(rate.resetAt).toLocaleTimeString()}`}>{rate.remaining} API points left this hour</span>
           )}
-          {project && <span className="muted" style={{ fontSize: 12 }}>Loaded {new Date(project.loadedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span>}
-          <button className="btn" onClick={state.refresh} disabled={loading}>
+          <button className="btn" onClick={state.refresh} disabled={loading}
+            title={project ? `Loaded at ${new Date(project.loadedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : undefined}>
             {loading ? (progress ? `Loading ${progress.loaded}/${progress.total}…` : "Loading…") : "Refresh"}
           </button>
         </>
       )}
-      <a className="btn ghost" href="#/">Projects</a>
-      <UserMenu onSignOut={onSignOut} />
     </div>
   );
-  const tabs = (
-    <nav className="tabs" aria-label="Views">
-      {TABS.map(t => (
-        <a key={t.id} className="tab" href={hrefFor(routeFor(t.id))} aria-current={t.id === active ? "page" : undefined}>{t.label}</a>
+  const pending = githubOnly ? 0 : cs.net.length;
+  const nav = (
+    <aside className="sidenav">
+      {GROUPS.map(g => (
+        <nav key={g.label} className="nav-group" aria-label={g.label}>
+          <h2>{g.label}</h2>
+          {g.views.map(t => (
+            <a key={t.id} className="nav-link" href={hrefFor(routeFor(t.id))} aria-current={t.id === active ? "page" : undefined}>
+              {t.label}
+              {t.id === "review" && pending > 0 && <span className="pill count num">{pending}</span>}
+            </a>
+          ))}
+        </nav>
       ))}
-    </nav>
+      {/* Things about the app rather than the plan: kept out of the top bar. */}
+      <div className="nav-foot">
+        <ThemeToggle />
+        <a className="nav-link" href="#/">All projects</a>
+        {onSignOut && <button className="nav-link" onClick={onSignOut}>Sign out</button>}
+      </div>
+    </aside>
   );
 
   return (
     <>
-      <TopBar crumb={crumb} tabs={tabs} right={right} />
+      <TopBar crumb={crumb} right={right} />
+      <div className="shell">
+      {nav}
       <main className="page">
         {error && (
           <div className="callout bad" role="alert" style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
             <span>{error} {project && "Showing the last loaded copy."}</span>
-            {errorKind === "auth" && onSignOut && <button className="btn" onClick={onSignOut}>Connect a new token</button>}
+            {errorKind === "auth" && onTokenRejected && <button className="btn primary" onClick={onTokenRejected}>Create a new token</button>}
             {errorKind === "not-found" && <a className="btn" href="#/">Choose another project</a>}
           </div>
         )}
@@ -184,7 +224,7 @@ export function ProjectScreen({ source, view, onSignOut }: { source: Source; vie
         )}
         {!project && !error && <p className="muted">{progress ? `Loading items ${progress.loaded} of ${progress.total}…` : "Loading the project…"}</p>}
         {shown && mapping && (
-          <>
+          <Suspense fallback={<p className="muted">Loading the view…</p>}>
             {active === "overview" && <Overview project={shown} mapping={mapping} />}
             {active === "gantt" && <Gantt project={shown} mapping={mapping} draft={draft} editor={editor} changed={githubOnly ? 0 : cs.net.length} onDiscardAll={editor ? cs.clear : undefined} prefs={prefs} setPrefs={setPrefs} selected={selected} onSelect={setSelected}
               baselines={history.baselines} compare={compare} onCompare={id => compareTo(id)} />}
@@ -217,7 +257,7 @@ export function ProjectScreen({ source, view, onSignOut }: { source: Source; vie
             {active === "settings" && project && <Settings project={project} mapping={mapping} setMapping={state.setMapping} resetMapping={state.resetMapping} prefs={prefs} setPrefs={setPrefs} aiHref={hrefFor(routeFor("ai"))}
               extra={<HistorySettings history={history} owner={owner} number={number} canShare={source.kind === "github"}
                 repos={[...new Set(project.items.map(i => i.repo).filter((r): r is string => !!r))].sort()} />} />}
-          </>
+          </Suspense>
         )}
         <UndoToast action={cs.lastAction} onUndo={() => { const u = cs.lastAction?.undo; if (u) u(); else cs.undo(); }}
           canUndo={(cs.canUndo || !!cs.lastAction?.undo) && !githubOnly} />
@@ -228,6 +268,7 @@ export function ProjectScreen({ source, view, onSignOut }: { source: Source; vie
             local={prefs.local} speak={say} value={command} onQuery={setCommand} schedule={schedule ?? undefined} />
         )}
       </main>
+      </div>
     </>
   );
 }

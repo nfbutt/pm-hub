@@ -41,6 +41,10 @@ const csp = (): Plugin => ({
 export default defineConfig({
   base: "/pm-hub/",
   plugins: [react(), csp()],
+  // The one chunk over Vite's 500 kB is the Epic Map's graph library (cytoscape), which
+  // only loads when the Epic Map is opened. The limit sits just above it, so the page
+  // itself (about 320 kB) still warns if it grows.
+  build: { chunkSizeWarningLimit: 600 },
   test: {
     environment: "node",
     include: ["test/**/*.test.ts", "test/**/*.test.tsx"],

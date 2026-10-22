@@ -1,8 +1,19 @@
-import type { ReactNode } from "react";
+import { useLayoutEffect, useRef, type ReactNode } from "react";
 
 export function TopBar({ crumb, tabs, right }: { crumb?: ReactNode; tabs?: ReactNode; right?: ReactNode }) {
+  // The bar wraps on a narrow window, and the side navigation sticks just below it.
+  const bar = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    const el = bar.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const set = () => document.documentElement.style.setProperty("--topbar-h", `${el.offsetHeight}px`);
+    set();
+    const ro = new ResizeObserver(set);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   return (
-    <header className="topbar">
+    <header className="topbar" ref={bar}>
       <div className="topbar-in">
         <a className="brand" href="#/">
           <img src={`${import.meta.env.BASE_URL}favicon.svg`} alt="" />

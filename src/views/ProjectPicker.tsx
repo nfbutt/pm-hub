@@ -6,7 +6,7 @@ import { hrefFor } from "../router";
 import { TopBar } from "../ui/TopBar";
 import { UserMenu } from "../ui/UserMenu";
 
-export function ProjectPicker({ client, onSignOut }: { client: GitHubClient; onSignOut: () => void }) {
+export function ProjectPicker({ client, onSignOut, onTokenRejected }: { client: GitHubClient; onSignOut: () => void; onTokenRejected?: () => void }) {
   const [state, setState] = useState<{ viewer: Viewer; projects: ProjectSummary[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showClosed, setShowClosed] = useState(false);
@@ -15,8 +15,14 @@ export function ProjectPicker({ client, onSignOut }: { client: GitHubClient; onS
     let live = true;
     loadViewerProjects(client)
       .then(r => live && setState(r))
-      .catch(e => live && setError(e instanceof GitHubError ? e.message : "Couldn't load your projects."));
+      .catch(e => {
+        if (!live) return;
+        // A token GitHub no longer accepts is not an error to read: it is a new token to make.
+        if (e instanceof GitHubError && e.kind === "auth" && onTokenRejected) { onTokenRejected(); return; }
+        setError(e instanceof GitHubError ? e.message : "Couldn't load your projects.");
+      });
     return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client]);
 
   const projects = state?.projects.filter(p => showClosed || !p.closed) ?? [];

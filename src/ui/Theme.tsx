@@ -20,7 +20,7 @@ export function writeTheme(theme: Theme) {
 
 /** The colour of the browser's own chrome, so the tab matches the app. */
 function chromeColor(dark: boolean) {
-  return dark ? "#0a0e15" : "#f7f8fa";
+  return dark ? "#0e1318" : "#f4f6f7";
 }
 
 /** Puts the theme on the page. "system" means: whatever the system says. */
