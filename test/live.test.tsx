@@ -53,7 +53,7 @@ describe.skipIf(!token)("live GitHub project", () => {
       ["burnup", <BurnUp project={p} mapping={m} />],
       ["confidence", <Confidence project={p} mapping={m} />],
       ["dependencies", <Dependencies project={p} mapping={m} draft={emptyDraft()} />],
-      ["settings", <Settings project={p} mapping={m} setMapping={noop} resetMapping={noop} prefs={defaultPrefs} setPrefs={noop} />],
+      ["settings", <Settings project={p} mapping={m} setMapping={noop} resetMapping={noop} prefs={defaultPrefs} setPrefs={noop} aiHref="#/ai" />],
     ];
     const rendered: Record<string, number> = {};
     for (const [name, el] of views) rendered[name] = renderToString(el).length;

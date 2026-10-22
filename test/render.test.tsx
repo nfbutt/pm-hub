@@ -13,6 +13,7 @@ import { Gantt } from "../src/views/Gantt";
 import { Overview } from "../src/views/Overview";
 import { Releases } from "../src/views/Releases";
 import { Settings } from "../src/views/Settings";
+import { Ai } from "../src/views/Ai";
 import { Plan } from "../src/views/Plan";
 import { ItemDrawer } from "../src/views/ItemDrawer";
 import { CommandMenu } from "../src/ui/CommandMenu";
@@ -164,8 +165,20 @@ describe("views render with the demo project", () => {
     expect(html).toContain("cal-day");
   });
 
+  it("The AI setup says what to do, in order", () => {
+    const html = renderToString(<Ai prefs={defaultPrefs} setPrefs={noop} />);
+    expect(html).toContain("Set up the AI");
+    expect(html).toContain("Where does the model run?");
+    expect(html).toContain("Is it there?");
+    expect(html).toContain("Which model?");
+    expect(html).toContain("The microphone");
+    expect(html).toContain("Does it work?");
+    // The command a person needs, ready to copy.
+    expect(html).toContain("ollama pull qwen2.5:7b");
+  });
+
   it("Settings", () => {
-    const html = renderToString(<Settings project={project} mapping={mapping} setMapping={noop} resetMapping={noop} prefs={defaultPrefs} setPrefs={noop} />);
+    const html = renderToString(<Settings project={project} mapping={mapping} setMapping={noop} resetMapping={noop} prefs={defaultPrefs} setPrefs={noop}  aiHref="#/ai"/>);
     expect(html).toContain("Start date field");
   });
 });

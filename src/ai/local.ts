@@ -42,7 +42,10 @@ export const DEFAULT_VOICE_BASE = "http://localhost:8000/v1";
 export const DEFAULT_VOICE_MODEL = "whisper-1";
 
 export const defaultLocal: LocalSettings = {
-  enabled: false, base: "http://localhost:11434/v1", chatModel: "qwen3", embedModel: "qwen3-embedding:0.6b",
+  // qwen2.5 answers straight away. The qwen3 family thinks before it answers, and a
+  // plan is exactly the kind of thing it overthinks: minutes for an answer that may
+  // never come. The setup page asks the server what it has and offers a better one.
+  enabled: false, base: "http://localhost:11434/v1", chatModel: "qwen2.5:7b", embedModel: "qwen3-embedding:0.6b",
   voiceBase: DEFAULT_VOICE_BASE, voiceModel: DEFAULT_VOICE_MODEL,
 };
 
@@ -273,6 +276,31 @@ export async function listModels(settings: LocalSettings): Promise<string[] | nu
     return ids;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Is the server there at all, and what does it have? Two different questions: a server
+ * that is not running needs starting, and a server with no models needs a model pulled.
+ */
+export async function serverStatus(settings: LocalSettings): Promise<{ there: boolean; models: string[]; message: string }> {
+  if (!canCall(settings).ok) return { there: false, models: [], message: canCall(settings).why ?? "That address is not on this computer." };
+  try {
+    const key = readApiKey();
+    const res = await fetch(`${trimSlash(settings.base)}/models`, { headers: key ? { authorization: `Bearer ${key}` } : {} });
+    if (!res.ok) return { there: false, models: [], message: `The server at ${settings.base} said ${res.status}.` };
+    const data = await res.json();
+    const rows = (data as { data?: { id?: unknown }[] }).data;
+    const models = Array.isArray(rows) ? rows.map(r => r?.id).filter((id): id is string => typeof id === "string") : [];
+    modelCache = { at: Date.now(), base: settings.base, models };
+    return {
+      there: true, models,
+      message: models.length
+        ? `The server is there, with ${models.length} model${models.length === 1 ? "" : "s"}.`
+        : "The server is there, but it has no models yet.",
+    };
+  } catch {
+    return { there: false, models: [], message: `Nothing is answering at ${settings.base}.` };
   }
 }
 

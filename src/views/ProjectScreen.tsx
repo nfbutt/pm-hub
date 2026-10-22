@@ -31,6 +31,7 @@ import { Schedule } from "./Schedule";
 import { Workload } from "./Workload";
 import { Releases } from "./Releases";
 import { Settings } from "./Settings";
+import { Ai } from "./Ai";
 import { Changes } from "./Changes";
 import { HistorySettings } from "./HistorySettings";
 import { useHistory } from "./useHistory";
@@ -55,6 +56,7 @@ const TABS: { id: ViewId; label: string }[] = [
   { id: "compare", label: "Compare" },
   { id: "planner", label: "Planner" },
   { id: "changes", label: "What changed" },
+  { id: "ai", label: "AI" },
   { id: "settings", label: "Settings" },
 ];
 
@@ -142,7 +144,7 @@ export function ProjectScreen({ source, view, onSignOut }: { source: Source; vie
       {project && cs.ready && <ChangeBar cs={cs} githubOnly={githubOnly} setGithubOnly={setGithubOnly} reviewHref={hrefFor(routeFor("review"))} />}
       <ThemeToggle />
       <GlobalMic settings={prefs.local} />
-      <AiStatus settings={prefs.local} settingsHref={hrefFor(routeFor("settings"))} />
+      <AiStatus settings={prefs.local} settingsHref={hrefFor(routeFor("ai"))} />
       {source.kind === "github" && (
         <>
           {rate && rate.remaining < 500 && (
@@ -211,7 +213,8 @@ export function ProjectScreen({ source, view, onSignOut }: { source: Source; vie
                 mapping={mapping} history={history} scenario={cs.scenarios.list.find(s => s.id === cs.scenarios.active)?.name ?? "Default"}
                 goBack={() => { location.hash = hrefFor(routeFor("gantt")); }} />
             )}
-            {active === "settings" && project && <Settings project={project} mapping={mapping} setMapping={state.setMapping} resetMapping={state.resetMapping} prefs={prefs} setPrefs={setPrefs}
+            {active === "ai" && <Ai prefs={prefs} setPrefs={setPrefs} />}
+            {active === "settings" && project && <Settings project={project} mapping={mapping} setMapping={state.setMapping} resetMapping={state.resetMapping} prefs={prefs} setPrefs={setPrefs} aiHref={hrefFor(routeFor("ai"))}
               extra={<HistorySettings history={history} owner={owner} number={number} canShare={source.kind === "github"}
                 repos={[...new Set(project.items.map(i => i.repo).filter((r): r is string => !!r))].sort()} />} />}
           </>

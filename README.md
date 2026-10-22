@@ -106,19 +106,29 @@ curl -X POST http://localhost:8000/v1/models/Systran/faster-whisper-base \
   -H 'Content-Type: application/json' -d '{"type": "speech-to-text"}'
 ```
 
-The names these servers use are nothing like `whisper-1`, so pm-hub **asks the server what it has** and uses one of its own models rather than a name that would fail every time. *Settings → Local model → What speech models does it have?* lists them.
+The names these servers use are nothing like `whisper-1`, so pm-hub **asks the server what it has** and uses one of its own models rather than a name that would fail every time. The **AI** page's microphone section lists them.
+
+### Setting the AI up
+
+There is an **AI** page (the *AI* tab, or the pill in the top bar) that sets the AI up in five steps, because each part fails in a different way and quietly:
+
+1. **Where does the model run?** This computer, or OpenRouter. A hosted model needs a key *and* a separate tick saying the text of your issues may be sent.
+2. **Is it there?** pm-hub asks the server. If nothing answers, it gives you the command to start one — `ollama serve`, then `ollama pull qwen2.5:7b` and `ollama pull qwen3-embedding:0.6b` — each with a **Copy** button.
+3. **Which model?** The server's own models, each with a line saying what it is for: `qwen2.5:7b` *"answers straight away"*, `qwen3:8b` *"thinks before it answers, so it can take minutes"*, `qwen3-embedding:0.6b` *"turns text into vectors, so the map can compare by meaning"*. One click picks one; **use the ones I would pick** picks both.
+4. **The microphone**, if you want it: its own server, its own model names, and the command to start it.
+5. **Does it work?** A test that says what works and what does not.
+
+The names matter more than they look. `qwen3:8b` takes four minutes and forty seconds to answer a planning question; `qwen2.5:7b` takes six seconds. That is why pm-hub points at the second one and warns about the first.
 
 ### Is the AI working?
 
-There is a pill in the top bar that says so: **AI off**, **AI ready**, or **AI not answering**. Click it to check the connection — it tests the chat model and the embedding model one at a time, and tells you which half is missing, the exact command to fix it (`ollama pull qwen3-embedding`), and **the names the server actually has** so the fix is a name to type rather than a guess. The answer is remembered, so the app does not ask the model again on every page.
-
-In *Settings → Local model*, **What does the server have?** asks the server for its models and lets you put any of them in the chat or the embeddings field. It is worth doing once: the name the server uses is often not the name you would guess — `qwen3` is not `qwen3:8b`.
+There is a pill in the top bar that says so: **AI off**, **AI ready**, or **AI not answering**. Click it to check the connection — it tests the chat model and the embedding model one at a time, and tells you which half is missing, the exact command to fix it (`ollama pull qwen3-embedding`), and **the names the server actually has** so the fix is a name to type rather than a guess. A check is worth five minutes: an old failure is not held against you for ever, and opening the panel checks again.
 
 pm-hub also matches a name to the closest one the server has, so a family name (`qwen3`) finds the model you actually installed (`qwen3:8b`) and a family with several sizes takes the smallest. The default embedding model is `qwen3-embedding:0.6b` — 1024 dimensions in 639 MB, rather than the 4.7 GB behind the `latest` tag.
 
 ### A model on your own computer, or one somewhere else (optional)
 
-The Epic Map and the Roadmap can ask a model running on **your** machine to compare work by meaning, name what an epic is really about, explain an overlap, suggest epics that are missing, and say which items really block each other. It is off until you turn it on in *Settings → Local model*.
+The Epic Map and the Roadmap can ask a model running on **your** machine to compare work by meaning, name what an epic is really about, explain an overlap, suggest epics that are missing, and say which items really block each other. It is off until you turn it on on the **AI** page.
 
 - **Nothing leaves your computer — unless you say otherwise.** The address has to be `localhost` or `127.0.0.1`; anything else is refused before a request is made, unless you switch to a hosted model and allow it.
 - **Only issue text goes to the model**: titles and bodies, plus the epic titles and the words two epics share. **Your GitHub token is never part of a request**, and no project metadata, file or repository is sent.
@@ -127,7 +137,7 @@ The Epic Map and the Roadmap can ask a model running on **your** machine to comp
 - If the model is slow, unreachable or answers something that does not make sense, pm-hub quietly falls back to its own analysis.
 - The built page's Content-Security-Policy allows `http://localhost:*` and `http://127.0.0.1:*` in `connect-src`, and nothing else.
 
-**A hosted model.** *Settings → Local model* can also point at a hosted service that speaks the same API — OpenRouter, for one, which runs Qwen. The switch is deliberate and separate from the address: choosing OpenRouter fills in the address and a model name, and you still have to tick *"I understand that a model that runs elsewhere reads the text of my issues"*. Until you do, pm-hub refuses to make the request. The key is kept out of your preferences and out of the shared plan history, and by default it lives only for that tab.
+**A hosted model.** The **AI** page can also point at a hosted service that speaks the same API — OpenRouter, for one, which runs Qwen. The switch is deliberate and separate from the address: choosing OpenRouter fills in the address and a model name, and you still have to tick *"I understand that a model that runs elsewhere reads the text of my issues"*. Until you do, pm-hub refuses to make the request. The key is kept out of your preferences and out of the shared plan history, and by default it lives only for that tab.
 
 What a hosted model receives: the titles and bodies of the issues it is asked about, and the question itself. Never your GitHub token, never a repository, never the plan history. And note that OpenRouter has no embedding models, so with one the Epic Map compares by words rather than by meaning.
 
@@ -137,7 +147,7 @@ Ollama refuses browser calls from another origin unless you allow this page. Sta
 OLLAMA_ORIGINS=https://nfbutt.github.io ollama serve
 ```
 
-Then run `ollama pull qwen3` and `ollama pull qwen3-embedding`, and set the address to `http://localhost:11434/v1` in *Settings → Local model*. LM Studio and llama.cpp's server work the same way.
+Then run `ollama pull qwen2.5:7b` and `ollama pull qwen3-embedding:0.6b` — the **AI** page gives you both commands with a Copy button — and set the address to `http://localhost:11434/v1` there. LM Studio and llama.cpp's server work the same way.
 
 ### Comparing two epics
 
@@ -147,7 +157,7 @@ Drag a story from one side to the other to move it. The moves are listed, you ti
 
 ### Speaking to it, and working together
 
-There is a microphone in the top bar: speak and the words go into whatever you were typing. It records on this computer and is sent to a transcription server on this computer — never to the browser's own speech API, which sends your voice to a search engine. Turn one on in *Settings → Local model*.
+There is a microphone in the top bar: speak and the words go into whatever you were typing. It records on this computer and is sent to a transcription server on this computer — never to the browser's own speech API, which sends your voice to a search engine. Turn one on on the **AI** page.
 
 A plan can be shared with a team through the plan history: pm-hub writes baselines, applied changes and finished goals to a folder in a repository you choose, and everyone sees the same record. The *draft* stays in your browser until you apply it.
 
