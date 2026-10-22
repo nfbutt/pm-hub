@@ -96,3 +96,11 @@
 .basedelta.late { color: var(--bad); background: color-mix(in srgb, var(--bad) 12%, var(--surface)); }
 .basedelta.early { color: var(--good); background: color-mix(in srgb, var(--good) 12%, var(--surface)); }
 .scopebadge { flex: none; font-size: 10.5px; font-weight: 700; color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); border-radius: 5px; padding: 0 5px; margin-left: 6px; }
+
+/* view options */
+.viewopts { position: relative; }
+.viewopts > .btn { display: inline-flex; gap: 6px; align-items: center; }
+.viewopts > .btn .pill { padding: 0 6px; }
+.viewopts-panel { display: grid; gap: 12px; min-width: 300px; padding: 12px 14px; }
+.pill-x { border: 0; background: none; color: inherit; font-size: 14px; line-height: 1; padding: 0 0 0 2px; opacity: .7; }
+.pill-x:hover { opacity: 1; }

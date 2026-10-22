@@ -54,7 +54,7 @@
 .emap-card { border: 1px solid var(--line-soft); border-radius: 9px; padding: 9px 11px; display: grid; gap: 5px; }
 .emap-card.lit { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
 .emap-card-head { display: flex; gap: 6px; align-items: center; }
-.emap-kind { font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
+.emap-kind { font-size: 11.5px; font-weight: 600; color: var(--muted);
   background: var(--surface-2); border-radius: 999px; padding: 2px 8px; }
 .emap-gain { margin-left: auto; font-size: 11px; font-weight: 700; font-family: var(--f-mono); color: var(--muted); }
 .emap-gain.up { color: var(--good); }

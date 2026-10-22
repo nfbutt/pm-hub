@@ -343,11 +343,13 @@ export async function testModel(settings: LocalSettings): Promise<ModelCheck & {
     return { ok: false, chat: false, embed: false, message: "That address is not on this computer.", fix: canCall(settings).why ?? "Use localhost or 127.0.0.1.", seconds: 0 };
   }
   const started = Date.now();
+  // The test is asked for before the model is switched on, so it resolves names as if it were.
+  const on = { ...settings, enabled: true };
   let chat: unknown = null;
   let failure: string | null = null;
   try {
-    chat = await post({ ...settings, enabled: true }, "/chat/completions", {
-      model: await resolveModel(settings, settings.chatModel), temperature: 0, max_tokens: 256,
+    chat = await post(on, "/chat/completions", {
+      model: await resolveModel(on, settings.chatModel), temperature: 0, max_tokens: 256,
       messages: [{ role: "user", content: "Reply with the single word: ready" }],
     });
   } catch (e) {
@@ -364,7 +366,7 @@ export async function testModel(settings: LocalSettings): Promise<ModelCheck & {
 
   let embedOk = false;
   try {
-    const embed = await post({ ...settings, enabled: true }, "/embeddings", { model: settings.embedModel, input: ["ready"] });
+    const embed = await post(on, "/embeddings", { model: await resolveModel(on, settings.embedModel), input: ["ready"] });
     embedOk = Array.isArray((embed as { data?: unknown[] } | null)?.data);
   } catch {
     // No embedding model here, or no permission. Either way the map compares by words.

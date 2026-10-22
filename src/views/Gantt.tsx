@@ -1,4 +1,4 @@
-import { Fragment, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent, type ReactNode } from "react";
 import { axis, DAY_PX, SNAP_DAYS, xOf, type Zoom } from "../model/axis";
 import { addDays, priorityOf, type Mapping } from "../model/mapping";
 import type { Item, Project } from "../model/normalize";
@@ -223,28 +223,35 @@ export function Gantt({ project, mapping, draft, editor, changed, onDiscardAll, 
             <button key={z} className={z === zoom ? "on" : ""} aria-pressed={z === zoom} onClick={() => setPrefs({ ...prefs, zoom: z })}>{z[0]!.toUpperCase() + z.slice(1)}</button>
           ))}
         </div>
-        <label className="check"><input id="g-closed" type="checkbox" checked={prefs.includeClosed} onChange={e => setPrefs({ ...prefs, includeClosed: e.target.checked })} /> Show closed</label>
         <button className="btn" onClick={() => setExpanded(expanded.size ? new Set() : new Set(groups.flatMap(g => g.rows.filter(r => r.depth === 0 && hasKids(r.item)).map(r => r.item.key))))}>
           {expanded.size ? "Collapse all" : "Expand all"}
         </button>
-        {editor && (
-          <label className="check" title="What happens to items blocked by a bar you move">
-            Dependents
-            <select id="g-shift" className="mini-select" value={prefs.shiftMode} onChange={e => setPrefs({ ...prefs, shiftMode: e.target.value as Prefs["shiftMode"] })}>
-              <option value="on-overlap">move only if they would overlap</option>
-              <option value="keep-gap">keep their gap</option>
-              <option value="none">stay put</option>
-            </select>
-          </label>
-        )}
-        {onCompare && (
-          <label className="check" title="Draw a saved baseline as outlines behind the bars">
-            Compare to
-            <select id="g-compare" className="mini-select" value={compare?.id ?? ""} onChange={e => onCompare(e.target.value || null)}>
-              <option value="">{baselines.length ? "nothing" : "no baselines saved"}</option>
-              {baselines.map(b => <option key={b.id} value={b.id}>{b.name} · {new Date(b.savedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}{b.auto ? " (auto)" : ""}</option>)}
-            </select>
-          </label>
+        <ViewOptions active={(prefs.includeClosed ? 1 : 0) + (compare ? 1 : 0) + (editor && prefs.shiftMode !== "on-overlap" ? 1 : 0)}>
+          <label className="check"><input id="g-closed" type="checkbox" checked={prefs.includeClosed} onChange={e => setPrefs({ ...prefs, includeClosed: e.target.checked })} /> Show closed</label>
+          {editor && (
+            <label className="check" title="What happens to items blocked by a bar you move">
+              Dependents
+              <select id="g-shift" className="mini-select" value={prefs.shiftMode} onChange={e => setPrefs({ ...prefs, shiftMode: e.target.value as Prefs["shiftMode"] })}>
+                <option value="on-overlap">move only if they would overlap</option>
+                <option value="keep-gap">keep their gap</option>
+                <option value="none">stay put</option>
+              </select>
+            </label>
+          )}
+          {onCompare && (
+            <label className="check" title="Draw a saved baseline as outlines behind the bars">
+              Compare to
+              <select id="g-compare" className="mini-select" value={compare?.id ?? ""} onChange={e => onCompare(e.target.value || null)}>
+                <option value="">{baselines.length ? "nothing" : "no baselines saved"}</option>
+                {baselines.map(b => <option key={b.id} value={b.id}>{b.name} · {new Date(b.savedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}{b.auto ? " (auto)" : ""}</option>)}
+              </select>
+            </label>
+          )}
+        </ViewOptions>
+        {compare && onCompare && (
+          <span className="pill accent">Compare to: {baselines.find(b => b.id === compare.id)?.name ?? "baseline"}
+            <button className="pill-x" aria-label="Stop comparing" onClick={() => onCompare(null)}>×</button>
+          </span>
         )}
         {selected.size > 0 && <span className="pill accent">{selected.size} selected · <kbd>Ctrl K</kbd></span>}
         <span className="spacer" />
@@ -502,6 +509,31 @@ export function Gantt({ project, mapping, draft, editor, changed, onDiscardAll, 
           )}
         </Modal>
       )}
+    </div>
+  );
+}
+
+/**
+ * The settings you change once and then leave: tucked behind one button, so the toolbar
+ * keeps to what you reach for while planning. The badge says how many are not the default.
+ */
+function ViewOptions({ active, children }: { active: number; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    const onDown = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false); };
+    addEventListener("keydown", onKey);
+    addEventListener("mousedown", onDown);
+    return () => { removeEventListener("keydown", onKey); removeEventListener("mousedown", onDown); };
+  }, [open]);
+  return (
+    <div className="viewopts" ref={box}>
+      <button className="btn" aria-expanded={open} onClick={() => setOpen(o => !o)}>
+        View options{active > 0 && <span className="pill count num">{active}</span>}
+      </button>
+      {open && <div className="popover viewopts-panel" role="dialog" aria-label="View options">{children}</div>}
     </div>
   );
 }
