@@ -2,7 +2,7 @@
 // panel that checks the connection and says what to do about it.
 import { useEffect, useRef, useState } from "react";
 import { testModel, type LocalSettings, type ModelCheck } from "../../ai/local";
-import { FRESH_MS, readCheck, writeCheck } from "./checkCache";
+import { about, FRESH_MS, readCheck, writeCheck } from "./checkCache";
 import { testSpeech, type SpeechCheck } from "../../ai/voice";
 
 export function AiStatus({ settings, settingsHref }: { settings: LocalSettings; settingsHref: string }) {
@@ -12,6 +12,16 @@ export function AiStatus({ settings, settingsHref }: { settings: LocalSettings; 
   const [checkedAt, setCheckedAt] = useState(() => readCheck(settings)?.at ?? 0);
   const [speech, setSpeech] = useState<SpeechCheck | null>(null);
   const box = useRef<HTMLDivElement>(null);
+
+  // A check of one setup says nothing about another: when the setup page changes the
+  // address or a model, the pill goes back to what is known about the new one.
+  const setup = about(settings);
+  useEffect(() => {
+    const cached = readCheck(settings);
+    setCheck(cached?.check ?? null);
+    setCheckedAt(cached?.at ?? 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setup]);
 
   useEffect(() => {
     if (!open) return;

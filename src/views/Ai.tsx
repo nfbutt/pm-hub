@@ -4,10 +4,10 @@
 // server running, a chat model on it, and an embedding model on it — and each of them
 // fails in a different way, quietly. So this view asks the server what it has, says
 // what each model is for, and gives the exact command when something is missing.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   DEFAULT_CONTEXT, DEFAULT_MAX_TOKENS, DEFAULT_TIMEOUT, DEFAULT_VOICE_BASE, DEFAULT_VOICE_MODEL,
-  defaultLocal, forgetModels, serverStatus, testModel, type LocalSettings, type ModelCheck,
+  defaultLocal, forgetModels, isLocalBase, serverStatus, testModel, type LocalSettings, type ModelCheck,
 } from "../ai/local";
 import { listVoiceModels, testSpeech, type SpeechCheck } from "../ai/voice";
 import { describeModel, isThinking, recommendModels } from "../ai/recommend";
@@ -32,12 +32,17 @@ export function Ai({ prefs, setPrefs }: { prefs: Prefs; setPrefs: (p: Prefs) => 
   const [speech, setSpeech] = useState<SpeechCheck | null>(null);
   const [speechModels, setSpeechModels] = useState<string[] | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  // Typing an address asks once per keystroke; only the latest answer counts.
+  const asked = useRef(0);
 
   /** Ask the server what it has. */
   async function look() {
+    const n = ++asked.current;
     setLooking(true);
     forgetModels();
-    setServer(await serverStatus(local));
+    const found = await serverStatus(local);
+    if (n !== asked.current) return;
+    setServer(found);
     setLooking(false);
   }
 
@@ -60,7 +65,15 @@ export function Ai({ prefs, setPrefs }: { prefs: Prefs; setPrefs: (p: Prefs) => 
   }
 
   const rec = server?.models.length ? recommendModels(server.models) : null;
-  const hosted = !!local.allowRemote;
+  // Hosted is where the address points, not whether it is allowed: the permission is
+  // asked for on the hosted form, so it cannot also be what shows the form.
+  const hosted = !isLocalBase(local.base);
+  // The page is served from somewhere other than this computer (GitHub Pages), so Ollama
+  // has to be told to answer it. Without that it refuses, and the browser reports the
+  // refusal as nothing answering at all.
+  const pageOrigin = typeof location === "undefined" ? "" : location.origin;
+  const pageIsLocal = !pageOrigin || isLocalBase(pageOrigin);
+  const ollamaOrigins = `OLLAMA_ORIGINS=${pageOrigin} ollama serve`;
 
   async function copy(text: string) {
     try { await navigator.clipboard?.writeText(text); setCopied(text); setTimeout(() => setCopied(null), 1500); } catch { /* no clipboard */ }
@@ -99,7 +112,7 @@ export function Ai({ prefs, setPrefs }: { prefs: Prefs; setPrefs: (p: Prefs) => 
             <div className="setting">
               <label htmlFor="ai-key">API key</label>
               <input id="ai-key" className="input" type="password" value={key} placeholder="sk-or-…"
-                onChange={e => setKey(e.target.value)} />
+                onChange={e => { setKey(e.target.value); writeApiKey(e.target.value, remember); }} />
               <label className="check-row">
                 <input type="checkbox" checked={remember} onChange={e => { setRemember(e.target.checked); writeApiKey(key, e.target.checked); }} />
                 Remember on this device
@@ -124,11 +137,33 @@ export function Ai({ prefs, setPrefs }: { prefs: Prefs; setPrefs: (p: Prefs) => 
           <button className="btn" onClick={() => void look()} disabled={looking}>{looking ? "Looking…" : "Ask the server"}</button>
           {server && <span className={server.there ? "good" : "bad"}>{server.message}</span>}
         </div>
-        {!hosted && !server?.there && (
+        {!hosted && server && !server.there && !pageIsLocal && (
           <div className="callout info" style={{ display: "grid", gap: 8 }}>
-            <b>Start Ollama, then give it a model.</b>
-            <span className="muted">Two commands, in a terminal. The first starts the server; the second downloads a model.</span>
-            <Command text={OLLAMA_START} onCopy={copy} copied={copied === OLLAMA_START} />
+            <b>Ollama may be running, but refusing this page.</b>
+            <span className="muted">
+              Ollama only answers pages on this computer unless told otherwise, and the browser cannot tell a refusal from
+              silence. Quit Ollama, then start it allowing <code>{pageOrigin}</code>:
+            </span>
+            <Command text={ollamaOrigins} onCopy={copy} copied={copied === ollamaOrigins} />
+            <span className="muted">
+              On Windows, set it once with <code>setx OLLAMA_ORIGINS {pageOrigin}</code> and restart Ollama from the tray.
+            </span>
+          </div>
+        )}
+        {!hosted && (!server?.there || !server.models.length) && (
+          <div className="callout info" style={{ display: "grid", gap: 8 }}>
+            {server?.there ? (
+              <>
+                <b>Give the server a model.</b>
+                <span className="muted">Two commands, in a terminal. Each downloads a model.</span>
+              </>
+            ) : (
+              <>
+                <b>Start Ollama, then give it a model.</b>
+                <span className="muted">Three commands, in a terminal. The first starts the server; the others download the models.</span>
+                <Command text={OLLAMA_START} onCopy={copy} copied={copied === OLLAMA_START} />
+              </>
+            )}
             <Command text={OLLAMA_PULL_CHAT} onCopy={copy} copied={copied === OLLAMA_PULL_CHAT} />
             <Command text={OLLAMA_PULL_EMBED} onCopy={copy} copied={copied === OLLAMA_PULL_EMBED} />
             <span className="muted">
@@ -189,7 +224,7 @@ export function Ai({ prefs, setPrefs }: { prefs: Prefs; setPrefs: (p: Prefs) => 
               )}
             </span>
           )}
-          {server?.models.length && !server.models.some(m => m === local.chatModel) && !isThinking(local.chatModel) && (
+          {!!server?.models.length && !server.models.some(m => m === local.chatModel) && !isThinking(local.chatModel) && (
             <span className="muted" style={{ display: "block", color: "var(--warn)" }}>
               The server does not have <b>{local.chatModel}</b>.{" "}
               {rec?.chat && <button className="linkbtn" onClick={() => setLocal({ chatModel: rec.chat! })}>Use {rec.chat}</button>}
@@ -297,7 +332,7 @@ export function Ai({ prefs, setPrefs }: { prefs: Prefs; setPrefs: (p: Prefs) => 
 function Command({ text, onCopy, copied }: { text: string; onCopy: (t: string) => void; copied: boolean }) {
   return (
     <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-      <code style={{ background: "var(--surface-2)", padding: "6px 10px", borderRadius: 8, fontSize: 13 }}>{text}</code>
+      <code style={{ background: "var(--surface-2)", padding: "6px 10px", borderRadius: 8, fontSize: 13, minWidth: 0, overflowWrap: "anywhere" }}>{text}</code>
       <button className="btn small" onClick={() => onCopy(text)}>{copied ? "Copied" : "Copy"}</button>
     </div>
   );
