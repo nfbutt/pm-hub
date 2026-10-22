@@ -79,7 +79,16 @@ describe("the local client", () => {
     stubFetch(() => null);
     const result = await testConnection(settings);
     expect(result.ok).toBe(false);
-    expect(result.message).toContain("No answer");
+    expect(result.message).toContain("500");
+  });
+
+  it("passes on what the server said when it refused", async () => {
+    // A wrong key or an unknown model: the person needs the server's own words.
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: false, status: 401, json: async () => ({ error: { message: "No endpoints found for that model" } }),
+    })));
+    const any = (_v: unknown): _v is unknown => true;
+    await expect(chatJson(settings, "s", "u", any)).rejects.toThrow("No endpoints found");
   });
 
   it("says so when the model answers", async () => {

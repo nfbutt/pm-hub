@@ -282,7 +282,9 @@ describe("asking the model about the plan", () => {
   });
 
   it("copes with the model not being there", async () => {
+    // A model that is not there is not a crash: the caller carries on without it.
     stub(null);
-    expect(await chatJson(settings, SYSTEM_DEPENDENCIES, "p", checkLinkAnswer)).toBeNull();
+    await expect(chatJson(settings, SYSTEM_DEPENDENCIES, "p", checkLinkAnswer)).rejects.toThrow();
+    expect(await chatJson(settings, SYSTEM_DEPENDENCIES, "p", checkLinkAnswer).catch(() => null)).toBeNull();
   });
 });

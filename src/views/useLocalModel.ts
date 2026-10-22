@@ -136,9 +136,14 @@ export function useLocalChat(project: Project, model: EpicMapModel, settings: Lo
       const ask = async (system: string, prompt: string): Promise<unknown | null> => {
         const cached = await readChat<unknown>(prompt);
         if (cached) { got++; return cached; }
-        const answer = await chatJson(settings, system, prompt, (v): v is unknown => typeof v === "object" && v !== null);
-        if (answer) { got++; void writeChat(prompt, answer); }
-        return answer;
+        try {
+          const answer = await chatJson(settings, system, prompt, (v): v is unknown => typeof v === "object" && v !== null);
+          if (answer) { got++; void writeChat(prompt, answer); }
+          return answer;
+        } catch {
+          // The model said why: a wrong key, an unknown model. Remember it as "no".
+          return null;
+        }
       };
 
       await Promise.all(questions.mixPrompts.map(async p => {
@@ -149,7 +154,7 @@ export function useLocalChat(project: Project, model: EpicMapModel, settings: Lo
         const answer = await ask(SYSTEM_OVERLAP, p.prompt) as { explanation?: string } | null;
         if (answer && checkOverlapWhy(answer)) whyAnswers.set(p.key, answer.explanation);
       }));
-      const gapAnswer = await chatJson(settings, SYSTEM_GAP_IDEAS, questions.gapPrompt, checkGapIdeas);
+      const gapAnswer = await chatJson(settings, SYSTEM_GAP_IDEAS, questions.gapPrompt, checkGapIdeas).catch(() => null);
       if (gapAnswer && checkGapIdeas(gapAnswer)) {
         gapAnswers = gapAnswer.ideas.slice(0, 3);
         got++;
