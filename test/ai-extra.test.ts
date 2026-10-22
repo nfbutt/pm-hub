@@ -202,9 +202,20 @@ describe("the microphone needs a speech server", () => {
     expect(check.fix).toBeTruthy();
   });
 
-  it("is happy when there is one", async () => {
+  it("is happy when there is one with a model", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ data: [{ id: "Systran/faster-whisper-base" }] }) })));
+    const check = await testSpeech(settings);
+    expect(check.ok).toBe(true);
+    expect(check.message).toContain("Systran/faster-whisper-base");
+  });
+
+  it("says so when the server has no speech model", async () => {
+    // A server that is there but cannot transcribe is no use to the microphone.
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ data: [] }) })));
-    expect((await testSpeech(settings)).ok).toBe(true);
+    const check = await testSpeech(settings);
+    expect(check.ok).toBe(false);
+    expect(check.message).toContain("no speech model");
+    expect(check.fix).toContain("faster-whisper-base");
   });
 
   it("will not ask a server that is not on this computer", async () => {

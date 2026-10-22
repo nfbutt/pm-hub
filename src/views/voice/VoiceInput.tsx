@@ -71,8 +71,8 @@ export function VoiceInput({ value, onChange, settings, placeholder, id, autoFoc
           onChange={e => onChange(e.target.value)} />
         <button type="button" className={`btn ${state === "listening" ? "primary" : ""}`}
           onClick={() => void toggle()}
-          disabled={state === "working" || !settings.enabled}
-          title={settings.enabled ? "Say it instead of typing it" : "Turn on a local model in Settings to use speech"}>
+          disabled={state === "working"}
+          title="Say it instead of typing it. The recording goes to the speech server on this computer.">
           {state === "listening" ? "◼" : state === "working" ? "…" : "🎤"}
         </button>
       </div>

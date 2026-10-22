@@ -77,3 +77,30 @@ export function amendmentOps(project: Project, epic: Item, amendments: Amendment
 export function epicStories(project: Project, epic: Item): { key: string; title: string; body: string }[] {
   return storiesOf(project, epic).map(s => ({ key: s.key, title: s.title, body: (s.body ?? "").slice(0, 160).replace(/\s+/g, " ").trim() }));
 }
+
+/**
+ * A model tends to copy the line it was shown, key and all: "PMH-13 | Add billing page".
+ * A story's title is not that, so take the key off the front. The key is in one of the
+ * two shapes pm-hub sees: "PMH-13" and "owner/repo#13".
+ */
+export function cleanTitle(text: string): string {
+  return text.replace(/^[A-Za-z0-9_.\-/]+(?:#\d+|-#?\d+)\s*[|:\u2013-]\s*/, "").trim();
+}
+
+/**
+ * The amendments as they should be shown and applied. The model is trusted for *which*
+ * stories to change and *what to say*, not for the titles: it echoes them badly, and the
+ * project already knows what every story is called.
+ */
+export function tidyAmendments(project: Project, epic: Item, answer: Amendments): Amendments {
+  const stories = new Map(epicStories(project, epic).map(s => [s.key, s]));
+  return {
+    add: answer.add.map(s => ({ ...s, title: cleanTitle(s.title) || s.title })),
+    rename: answer.rename
+      .filter(r => stories.has(r.key))
+      .map(r => ({ ...r, from: stories.get(r.key)!.title, to: cleanTitle(r.to) || r.to })),
+    overlap: answer.overlap
+      .filter(o => o.keys.length === 2 && o.keys.every(k => stories.has(k)))
+      .map(o => ({ ...o, titles: o.keys.map(k => stories.get(k)!.title) })),
+  };
+}

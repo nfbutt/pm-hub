@@ -91,7 +91,8 @@ describe("views render with the demo project", () => {
     expect(html).toContain("Write it");
     expect(html).toContain("Tidy an epic");
     expect(html).toContain("What are you building?");
-    expect(html).toContain("Turn on a local model");
+    // The microphone is always there: speaking needs a speech server, not a chat model.
+    expect(html).toContain("Say it instead of typing it");
   });
 
   it("Review groups a bulk change into one row", () => {    const groups = [{

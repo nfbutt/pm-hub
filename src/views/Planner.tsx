@@ -11,7 +11,7 @@ import { chatJson, defaultLocal, ModelError, ThinkingModelError, type LocalSetti
 import { isEpic, releaseOf, type Mapping } from "../model/mapping";
 import type { Project } from "../model/normalize";
 import { checkDraft, draftOps, estimate, summariseDraft, type PlanDraft } from "../model/plan/draft";
-import { amendmentOps, epicStories, type Amendments } from "../model/plan/amend";
+import { amendmentOps, epicStories, tidyAmendments, type Amendments } from "../model/plan/amend";
 import { matchEpics, type EpicMatch } from "../model/plan/match";
 import { newItem } from "../model/edits";
 import type { Editor } from "./useChangeSet";
@@ -118,13 +118,8 @@ export function Planner({ project, mapping, editor, local }: {
     }
     setWorking(false);
     if (!answer) { setError("The model did not answer. A model that answers straight away is usually better for this than a thinking one. Try again, or make the changes yourself."); return; }
-    // The story keys have to be ones this epic really has.
-    const keys = new Set(epicStories(project, amendEpic).map(s => s.key));
-    const checked: Amendments = {
-      add: answer.add,
-      rename: answer.rename.filter(r => keys.has(r.key)),
-      overlap: answer.overlap.filter(o => o.keys.every(k => keys.has(k))),
-    };
+    // The model says which stories to change; the project says what they are called.
+    const checked = tidyAmendments(project, amendEpic, answer);
     setAmendments(checked);
     setPicked(new Set([
       ...checked.add.map(a => `add:${a.title}`),
