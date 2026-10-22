@@ -12,14 +12,20 @@ export function App() {
   // GitHub turned the saved token down (expired or revoked). The link stays where it is,
   // so a new token lands the person back on the project they were opening.
   const [rejected, setRejected] = useState(false);
+  // Swapping the token by choice: the old one stays in use until the new one connects.
+  const [replacing, setReplacing] = useState(false);
   const client = useMemo(() => (token ? createClient(token) : null), [token]);
   const signOut = () => { clearToken(); setToken(null); setRejected(false); location.hash = "#/"; };
   const tokenRejected = () => { clearToken(); setToken(null); setRejected(true); };
-  const connected = (t: string) => { setRejected(false); setToken(t); };
+  const connected = (t: string) => { setRejected(false); setReplacing(false); setToken(t); };
+  const changeToken = () => setReplacing(true);
 
   if (route.kind === "demo") return <ProjectScreen source={{ kind: "demo" }} view={route.view} onSignOut={client ? signOut : undefined} />;
-  if (!client) return <Connect onConnected={connected} rejected={rejected} target={route.kind === "project" ? route : null} />;
-  if (route.kind === "home") return <ProjectPicker client={client} onSignOut={signOut} onTokenRejected={tokenRejected} />;
+  if (!client || replacing) {
+    return <Connect onConnected={connected} rejected={rejected} target={route.kind === "project" ? route : null}
+      onCancel={client ? () => setReplacing(false) : undefined} />;
+  }
+  if (route.kind === "home") return <ProjectPicker client={client} onSignOut={signOut} onTokenRejected={tokenRejected} onChangeToken={changeToken} />;
   return (
     <ProjectScreen
       key={`${route.owner}/${route.number}`}
@@ -27,6 +33,7 @@ export function App() {
       view={route.view}
       onSignOut={signOut}
       onTokenRejected={tokenRejected}
+      onChangeToken={changeToken}
     />
   );
 }
