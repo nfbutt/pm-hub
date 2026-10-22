@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { Plugin } from "vite";
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
@@ -17,11 +18,23 @@ export const CSP = [
   "form-action 'none'",
 ].join("; ");
 
+/**
+ * The theme has to be on the page before the first paint, which means a script that runs
+ * while the document is still being read. The policy allows exactly that one script, by
+ * its hash, so nothing else can be inlined — the rest of the policy stays strict.
+ */
 const csp = (): Plugin => ({
   name: "pm-hub-csp",
   apply: "build",
-  transformIndexHtml: html =>
-    html.replace("<head>", `<head>\n    <meta http-equiv="Content-Security-Policy" content="${CSP}" />`),
+  // After Vite's own html transforms, so the hash is of the text that ships.
+  enforce: "post",
+  transformIndexHtml: html => {
+    const script = html.match(/<script id="pm-hub-theme">([\s\S]*?)<\/script>/);
+    if (!script) return html.replace("<head>", `<head>\n    <meta http-equiv="Content-Security-Policy" content="${CSP}" />`);
+    const hash = createHash("sha256").update(script[1]!).digest("base64");
+    const policy = CSP.replace("script-src 'self'", `script-src 'self' 'sha256-${hash}'`);
+    return html.replace("<head>", `<head>\n    <meta http-equiv="Content-Security-Policy" content="${policy}" />`);
+  },
 });
 
 // Served from https://nfbutt.github.io/pm-hub/ on GitHub Pages.

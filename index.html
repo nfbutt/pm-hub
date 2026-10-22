@@ -14,6 +14,14 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
     />
     <title>pm-hub</title>
+    <script id="pm-hub-theme">
+      // The theme, before the first paint, so a dark app never flashes light. The
+      // content policy allows exactly this one script, by its hash.
+      try {
+        var t = localStorage.getItem("pm-hub:theme");
+        if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+      } catch (e) { /* the browser says no; the app will ask again */ }
+    </script>
   </head>
   <body>
     <div id="root"></div>
