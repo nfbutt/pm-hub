@@ -2,24 +2,14 @@
 // panel that checks the connection and says what to do about it.
 import { useEffect, useRef, useState } from "react";
 import { testModel, type LocalSettings, type ModelCheck } from "../../ai/local";
+import { FRESH_MS, readCheck, writeCheck } from "./checkCache";
 import { testSpeech, type SpeechCheck } from "../../ai/voice";
-
-const LAST_CHECK = "pm-hub:ai-check";
-
-interface Cached { at: number; check: ModelCheck }
-
-/** The last check, so the pill does not ask the model again on every page. */
-function cached(): Cached | null {
-  try { return JSON.parse(localStorage.getItem(LAST_CHECK) ?? "null"); } catch { return null; }
-}
-function remember(check: ModelCheck) {
-  try { localStorage.setItem(LAST_CHECK, JSON.stringify({ at: Date.now(), check } satisfies Cached)); } catch { /* optional */ }
-}
 
 export function AiStatus({ settings, settingsHref }: { settings: LocalSettings; settingsHref: string }) {
   const [open, setOpen] = useState(false);
   const [checking, setChecking] = useState(false);
-  const [check, setCheck] = useState<ModelCheck | null>(cached()?.check ?? null);
+  const [check, setCheck] = useState<ModelCheck | null>(() => readCheck(settings)?.check ?? null);
+  const [checkedAt, setCheckedAt] = useState(() => readCheck(settings)?.at ?? 0);
   const [speech, setSpeech] = useState<SpeechCheck | null>(null);
   const box = useRef<HTMLDivElement>(null);
 
@@ -36,11 +26,19 @@ export function AiStatus({ settings, settingsHref }: { settings: LocalSettings; 
     setChecking(true);
     const result = await testModel(settings);
     setCheck(result);
-    remember(result);
+    setCheckedAt(Date.now());
+    writeCheck(result, settings);
     // The microphone needs a different program, so it is checked on its own.
     setSpeech(await testSpeech(settings));
     setChecking(false);
   }
+
+  // The panel is open, so what it says had better be true now.
+  useEffect(() => {
+    if (!open) return;
+    if (!checkedAt || Date.now() - checkedAt > FRESH_MS) void run();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   // Off, ready, or something to look at.
   const state = !settings.enabled ? "off" : check ? (check.ok ? "on" : "bad") : "unknown";
