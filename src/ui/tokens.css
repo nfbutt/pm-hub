@@ -74,6 +74,7 @@ button, select, input { font: inherit; color: inherit; }
 button { cursor: pointer; }
 :focus-visible { outline: none; box-shadow: var(--ring); border-radius: 7px; }
 .num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+code { font-family: var(--f-mono); font-size: .92em; background: var(--surface-2); padding: 1px 5px; border-radius: 5px; }
 .muted { color: var(--muted); }
 .eyebrow { font-size: var(--fs-xs); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
 

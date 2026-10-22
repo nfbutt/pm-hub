@@ -55,8 +55,11 @@ export function AiStatus({ settings, settingsHref }: { settings: LocalSettings; 
           <h3>AI on this computer</h3>
           {state === "off" && (
             <>
-              <p className="muted">It is off. Turn it on in the settings, and point it at a model running on this computer.</p>
-              <a className="btn primary" href={settingsHref}>Turn it on</a>
+              <p className="muted">
+                It is off. Setting it up is three things: a model server running, a model to write with, and a model to
+                find meaning with. The setup page checks each one and gives you the command when one is missing.
+              </p>
+              <a className="btn primary" href={settingsHref}>Set up the AI</a>
             </>
           )}
           {state !== "off" && (
@@ -78,7 +81,7 @@ export function AiStatus({ settings, settingsHref }: { settings: LocalSettings; 
               )}
               <div className="ai-actions">
                 <button className="btn" onClick={() => void run()} disabled={checking}>{checking ? "Checking…" : "Test the connection"}</button>
-                <a className="btn ghost" href={settingsHref}>Settings</a>
+                <a className="btn ghost" href={settingsHref}>Set up the AI</a>
               </div>
               {!check && <p className="muted" style={{ fontSize: 12 }}>Nothing has been checked yet.</p>}
             </>
