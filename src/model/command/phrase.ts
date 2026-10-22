@@ -105,7 +105,7 @@ export function toIntent(answer: { action: string; target?: string; days?: numbe
 
 /** Asks a model to read a sentence, and checks what it says. */
 export async function readPhrase(settings: LocalSettings, phrase: string, keys: string[], releases: string[]): Promise<Intent | null> {
-  const answer = await chatJson(settings, SYSTEM_PHRASE, promptPhrase(phrase, keys, releases), checkIntent);
+  const answer = await chatJson(settings, SYSTEM_PHRASE, promptPhrase(phrase, keys, releases), checkIntent).catch(() => null);
   if (!answer) return null;
   return toIntent(answer, k => keys.includes(k));
 }

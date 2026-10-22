@@ -26,6 +26,8 @@ A model on your own machine (opt-in, localhost only, off by default) can read th
 
 **And any of it can be put back.** An apply keeps the operations and the ids it used, so *What changed* can roll it back days later: checked against GitHub, previewed, applied like anything else, undone with one keystroke.
 
+**A model can also run somewhere else.** The default is still the one on your own machine, over localhost, off until you say so. A hosted service (OpenRouter is the one wired up) needs a key *and* a second, separate tick saying the plan is allowed to leave the computer, and the page's CSP has to allow that address. The client speaks the OpenAI-compatible dialect every hosted service uses, asks for JSON, and **passes on the server's own words when it refuses** — a wrong key says "No auth credentials found", an unknown model says which models the server does have. Ollama's own fields (`options.num_ctx`) are only sent to Ollama, which is detected by asking it for its version, because another service forwards what it does not recognise straight to the model.
+
 ## The plan
 
 Each phase below is small enough to be one PR, and each was one. The order was by value, not by effort.
@@ -184,3 +186,4 @@ Still to do in this phase: a model filling in what the grammar cannot parse, and
 - Epic labels shrink when the map is zoomed out; a `min-zoomed-font-size` keeps them readable, but a constant-size overlay would be better.
 - Similarity is plain TF-IDF over titles, bodies and labels. The generic verbs filtered by `GENERIC` in `text.ts` need extending for real projects.
 - The plan works in calendar days. See phase 10.
+- OpenRouter has no embedding models (all 468 of them were checked), so with a hosted model the Epic Map compares by words rather than by meaning until a service that has one is named.

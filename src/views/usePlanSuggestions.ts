@@ -105,7 +105,7 @@ export function usePlanSuggestions(project: Project, mapping: Mapping, plan: Pla
 
       // An answer from before is as good as a fresh one.
       const cachedLinks = await readChat<{ links: ProposedLink[] }>(linkPrompt);
-      const linkAnswer = cachedLinks ?? await chatJson(settings, SYSTEM_DEPENDENCIES, linkPrompt, checkLinkAnswer);
+      const linkAnswer = cachedLinks ?? await chatJson(settings, SYSTEM_DEPENDENCIES, linkPrompt, checkLinkAnswer).catch(() => null);
       const checkedLinks = linkAnswer ? checkLinks(project, mapping, plan, linkAnswer.links) : { accepted: [], dropped: [] };
       if (linkAnswer && !cachedLinks) { got++; void writeChat(linkPrompt, linkAnswer); }
 
@@ -113,7 +113,7 @@ export function usePlanSuggestions(project: Project, mapping: Mapping, plan: Pla
       // The model labels each piece of work; pm-hub does the grouping. Asking a model to
       // group things itself means the same project comes out grouped differently every
       // time, and a roadmap that churns is worse than no roadmap.
-      const releaseAnswer = cachedReleases ?? await chatJson(settings, SYSTEM_RELEASES, releasePrompt, checkReleaseAnswer);
+      const releaseAnswer = cachedReleases ?? await chatJson(settings, SYSTEM_RELEASES, releasePrompt, checkReleaseAnswer).catch(() => null);
       // An answer cached before the shape changed is not an answer any more.
       const themes = releaseAnswer && Array.isArray(releaseAnswer.themes) ? releaseAnswer.themes : null;
       const checkedReleases = themes ? checkReleases(project, mapping, groupByTheme(themes)) : { accepted: [], dropped: [] };

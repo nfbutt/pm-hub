@@ -44,7 +44,7 @@ export function useCompareAI(
       // A claim has to be checkable against the words in the two epics.
       const sources = [a, b, ...storiesOf(project, a), ...storiesOf(project, b)];
       const found = (evidence: string) => sources.some(s => evidenceFound(evidence, s));
-      const got = await compareEpicsWithModel(settings, sa, sb, found);
+      const got = await compareEpicsWithModel(settings, sa, sb, found).catch(() => null);
       if (dead) return;
       if (!got) { setStatus("unreachable"); return; }
       const claims = got.common.length + got.different.length;

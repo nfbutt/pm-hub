@@ -46,6 +46,47 @@ export const defaultLocal: LocalSettings = {
   voiceBase: DEFAULT_VOICE_BASE, voiceModel: DEFAULT_VOICE_MODEL,
 };
 
+/** An error the model server explained: a wrong key, an unknown model, no room. */
+export class ModelError extends Error {
+  constructor(message: string) { super(message); this.name = "ModelError"; }
+}
+
+/** What the server said, in its own words. */
+async function explain(res: Response): Promise<string> {
+  try {
+    const body = await res.json();
+    const message = (body as { error?: { message?: string } | string }).error;
+    if (typeof message === "string") return message;
+    if (message && typeof message === "object" && message.message) return message.message;
+  } catch { /* the body was not json */ }
+  return `The server said ${res.status}.`;
+}
+
+/** Is this server Ollama? It answers a native API that the others do not have. */
+let ollamaCache: { base: string; yes: boolean } | null = null;
+async function isOllama(settings: LocalSettings): Promise<boolean> {
+  // Never touch a server the person has not allowed.
+  if (!canCall(settings).ok) return false;
+  const base = trimSlash(settings.base);
+  if (ollamaCache?.base === base) return ollamaCache.yes;
+  // Ollama's native API sits beside its OpenAI-compatible one.
+  const root = base.replace(/\/v\d+$/, "");
+  let yes = false;
+  try {
+    // A probe that hangs would hold up the real call, so it gives up quickly.
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 2000);
+    try {
+      const res = await fetch(`${root}/api/version`, { signal: ctrl.signal });
+      yes = res.ok;
+    } finally {
+      clearTimeout(timer);
+    }
+  } catch { /* not there */ }
+  ollamaCache = { base, yes };
+  return yes;
+}
+
 /** How long to wait for the model before giving up and using pm-hub's own analysis. */
 export const TIMEOUT_MS = 20000;
 
@@ -96,9 +137,11 @@ async function post(settings: LocalSettings, path: string, body: unknown): Promi
       body: JSON.stringify(body),
       signal: ctrl.signal,
     });
-    if (!res.ok) return null;
+    if (!res.ok) throw new ModelError(await explain(res));
     return await res.json();
-  } catch {
+  } catch (e) {
+    // A server that explained itself — a wrong key, an unknown model — is worth reading.
+    if (e instanceof ModelError) throw e;
     return null;
   } finally {
     clearTimeout(timer);
@@ -111,10 +154,17 @@ async function post(settings: LocalSettings, path: string, body: unknown): Promi
  */
 export async function embed(settings: LocalSettings, texts: string[]): Promise<number[][] | null> {
   if (!texts.length) return [];
-  const data = await post(settings, "/embeddings", {
-    model: await resolveModel(settings, settings.embedModel), input: texts,
-    options: { num_ctx: settings.contextTokens ?? DEFAULT_CONTEXT },
-  });
+  // A service with no embedding model answers with an error. That is not fatal: the map
+  // falls back to comparing words.
+  let data: unknown = null;
+  try {
+    data = await post(settings, "/embeddings", {
+      model: await resolveModel(settings, settings.embedModel), input: texts,
+      ...(await isOllama(settings) ? { options: { num_ctx: settings.contextTokens ?? DEFAULT_CONTEXT } } : {}),
+    });
+  } catch {
+    return null;
+  }
   const rows = (data as { data?: { index?: number; embedding?: unknown }[] } | null)?.data;
   if (!Array.isArray(rows) || rows.length !== texts.length) return null;
   const out: number[][] = new Array(texts.length);
@@ -135,7 +185,9 @@ export async function chatJson<T>(settings: LocalSettings, system: string, user:
   const data = await post(settings, "/chat/completions", {
     model: await resolveModel(settings, settings.chatModel), temperature: 0,
     max_tokens: settings.maxTokens ?? DEFAULT_MAX_TOKENS,
-    options: { num_ctx: settings.contextTokens ?? DEFAULT_CONTEXT },
+    // num_ctx is Ollama's own. Another service forwards what it does not recognise to
+    // the model, which is a good way to be rejected.
+    ...(await isOllama(settings) ? { options: { num_ctx: settings.contextTokens ?? DEFAULT_CONTEXT } } : {}),
     messages: [{ role: "system", content: system }, { role: "user", content: user }],
     response_format: { type: "json_object" },
   });
@@ -167,11 +219,16 @@ export class ThinkingModelError extends Error {
 
 /** Checks the model is there and answers, without asking it anything hard. */
 export async function testConnection(settings: LocalSettings): Promise<{ ok: boolean; message: string }> {
-  if (!isLocalBase(settings.base)) return { ok: false, message: "The address has to be on this computer: localhost or 127.0.0.1." };
-  const data = await post({ ...settings, enabled: true }, "/chat/completions", {
-    model: settings.chatModel, temperature: 0, max_tokens: 256,
-    messages: [{ role: "user", content: "Reply with the single word: ready" }],
-  });
+  if (!canCall(settings).ok) return { ok: false, message: canCall(settings).why ?? "The address has to be on this computer: localhost or 127.0.0.1." };
+  let data: unknown = null;
+  try {
+    data = await post({ ...settings, enabled: true }, "/chat/completions", {
+      model: await resolveModel(settings, settings.chatModel), temperature: 0, max_tokens: 256,
+      messages: [{ role: "user", content: "Reply with the single word: ready" }],
+    });
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "No answer from the model. Check the address and the model name." };
+  }
   const message = (data as { choices?: { message?: { content?: unknown; reasoning?: unknown } }[] } | null)?.choices?.[0]?.message;
   const content = typeof message?.content === "string" ? message.content : "";
   // A thinking model may think first and run out of room; its reasoning is still an answer.
@@ -240,7 +297,9 @@ export async function resolveModel(settings: LocalSettings, name: string): Promi
   const models = await listModels(settings);
   if (!models || models.includes(name)) return name;
   const base = name.split(":")[0]!;
-  const same = models.filter(m => m === name || m.split(":")[0] === base);
+  let same = models.filter(m => m === name || m.split(":")[0] === base);
+  // "qwen/qwen3.5-flash" should find "qwen/qwen3.5-flash-02-23".
+  if (!same.length) same = models.filter(m => m.startsWith(`${name}-`) || m.startsWith(`${name}:`));
   if (!same.length) return name;
   // Several sizes of the same family: take the smallest, so a name never drags a
   // sixteen gigabyte model into every call.
@@ -256,39 +315,49 @@ export async function testModel(settings: LocalSettings): Promise<ModelCheck & {
     return { ok: false, chat: false, embed: false, message: "That address is not on this computer.", fix: canCall(settings).why ?? "Use localhost or 127.0.0.1.", seconds: 0 };
   }
   const started = Date.now();
-  const chat = await post({ ...settings, enabled: true }, "/chat/completions", {
-    model: await resolveModel(settings, settings.chatModel), temperature: 0, max_tokens: 256,
-    messages: [{ role: "user", content: "Reply with the single word: ready" }],
-  });
+  let chat: unknown = null;
+  let failure: string | null = null;
+  try {
+    chat = await post({ ...settings, enabled: true }, "/chat/completions", {
+      model: await resolveModel(settings, settings.chatModel), temperature: 0, max_tokens: 256,
+      messages: [{ role: "user", content: "Reply with the single word: ready" }],
+    });
+  } catch (e) {
+    // A wrong key or an unknown model comes back as an error: say what it said.
+    failure = e instanceof Error ? e.message : "The model did not answer.";
+  }
   const seconds = Math.round((Date.now() - started) / 1000);
   const message = (chat as { choices?: { message?: { content?: unknown; reasoning?: unknown } }[] } | null)?.choices?.[0]?.message;
   const said = typeof message?.content === "string" ? message.content : "";
   // A thinking model spends its first tokens reasoning, and can run out of room before
   // it answers. Its reasoning still means the model is there and working.
   const thought = typeof message?.reasoning === "string" && message.reasoning.trim().length > 0;
-  const chatOk = said.trim().length > 0 || thought;
+  const chatOk = !failure && (said.trim().length > 0 || thought);
 
-  const embed = await post({ ...settings, enabled: true }, "/embeddings", { model: settings.embedModel, input: ["ready"] });
-  const embedOk = Array.isArray((embed as { data?: unknown[] } | null)?.data);
+  let embedOk = false;
+  try {
+    const embed = await post({ ...settings, enabled: true }, "/embeddings", { model: settings.embedModel, input: ["ready"] });
+    embedOk = Array.isArray((embed as { data?: unknown[] } | null)?.data);
+  } catch {
+    // No embedding model here, or no permission. Either way the map compares by words.
+    embedOk = false;
+  }
 
+  // What the server has, so the fix is a name to type rather than a guess.
+  const models = await listModels(settings);
+  const name = `“${settings.chatModel}”`;
+  const modelsFix = models?.length ? `The server has ${models.join(", ")}. Is the model called ${name}?` : null;
   const slow = seconds > 20 ? ` It took ${seconds} seconds, so the model is slow: a thinking model (qwen3 and its family) fills its context before it answers, and a smaller one that answers straight away will feel much better.` : "";
+
+  if (failure) return { ok: false, chat: false, embed: false, message: failure, fix: modelsFix, seconds };
   if (chatOk && embedOk) return { ok: true, chat: true, embed: true, message: `Everything works. The model answered “${(said || "yes").trim().slice(0, 40)}” in ${seconds} seconds.${slow}`, fix: null, seconds };
   if (chatOk) return {
     ok: true, chat: true, embed: false, seconds,
     message: "The model answers, but it cannot turn text into vectors.",
-    fix: `If the server has an embedding model, name it here. Without one the map compares by words rather than by meaning.`,
+    fix: "If the server has an embedding model, name it here. Without one the map compares by words rather than by meaning.",
   };
-  if (embedOk) return { ok: true, chat: false, embed: true, message: "The model can turn text into vectors, but it does not answer.", fix: `Pull the chat model: ollama pull ${settings.chatModel}`, seconds };
-  // Say what the server does have, so the fix is a name to type rather than a guess.
-  const models = await listModels(settings);
-  return {
-    ok: false, chat: false, embed: false,
-    message: `Nothing answered on that address${seconds ? ` after ${seconds} seconds` : ""}.`,
-    fix: models?.length
-      ? `The server has ${models.join(", ")}. Is the model called “${settings.chatModel}”?`
-      : `Is the model server running, and is it called “${settings.chatModel}”?`,
-    seconds,
-  };
+  if (embedOk) return { ok: true, chat: false, embed: true, message: "The model can turn text into vectors, but it does not answer.", fix: modelsFix ?? `Pull the chat model: ollama pull ${settings.chatModel}`, seconds };
+  return { ok: false, chat: false, embed: false, message: `Nothing answered on that address${seconds ? ` after ${seconds} seconds` : ""}.`, fix: modelsFix ?? `Is the model server running, and is it called ${name}?`, seconds };
 }
 
 // ---------------------------------------------------------------- answers

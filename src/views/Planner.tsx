@@ -7,7 +7,7 @@
 // Everything ends in the review screen, so nothing reaches GitHub until you say so.
 import { useEffect, useMemo, useState } from "react";
 import { checkAmend, checkEpic, checkPlan, promptAmend, promptEpic, promptPlan, SYSTEM_AMEND, SYSTEM_EPIC, SYSTEM_PLAN, type PlanContext } from "../ai/plan";
-import { chatJson, defaultLocal, ThinkingModelError, type LocalSettings } from "../ai/local";
+import { chatJson, defaultLocal, ModelError, ThinkingModelError, type LocalSettings } from "../ai/local";
 import { isEpic, releaseOf, type Mapping } from "../model/mapping";
 import type { Project } from "../model/normalize";
 import { checkDraft, draftOps, estimate, summariseDraft, type PlanDraft } from "../model/plan/draft";
@@ -86,8 +86,8 @@ export function Planner({ project, mapping, editor, local }: {
         if (answer) asDraft = answer;
       }
     } catch (e) {
-      if (e instanceof ThinkingModelError) { setError(e.message); return; }
-      setError("The model did not answer with a plan. Try again, or write the plan yourself.");
+      if (e instanceof ThinkingModelError || e instanceof ModelError) { setError(e.message); return; }
+      setError("The model did not answer with a plan. A model that answers straight away — qwen2.5, for one — is usually better for this than a thinking one, which can take minutes. Try again, or write the plan yourself.");
       return;
     }
     setWorking(false);
@@ -113,7 +113,7 @@ export function Planner({ project, mapping, editor, local }: {
         checkAmend);
     } catch (e) {
       setWorking(false);
-      setError(e instanceof ThinkingModelError ? e.message : "The model did not answer. Try again, or make the changes yourself.");
+      setError(e instanceof ThinkingModelError || e instanceof ModelError ? e.message : "The model did not answer. Try again, or make the changes yourself.");
       return;
     }
     setWorking(false);

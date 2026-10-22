@@ -70,7 +70,7 @@ export function checkCompare(v: unknown): v is ComparisonAnswer {
 export async function compareEpicsWithModel(
   settings: LocalSettings, a: EpicSummary, b: EpicSummary, found: (evidence: string) => boolean,
 ): Promise<ComparisonAnswer | null> {
-  const answer = await chatJson(settings, SYSTEM_COMPARE, promptCompare(a, b), checkCompare);
+  const answer = await chatJson(settings, SYSTEM_COMPARE, promptCompare(a, b), checkCompare).catch(() => null);
   if (!answer) return null;
   const keep = (claims: Claim[]) => claims.filter(c => found(c.evidence));
   const common = keep(answer.common), different = keep(answer.different);
