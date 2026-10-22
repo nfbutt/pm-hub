@@ -1,7 +1,7 @@
 // Recording, and turning the recording into words. The audio never leaves this computer:
 // it goes to the transcription server in Settings, and nowhere else.
 import { useEffect, useRef, useState } from "react";
-import { transcribe } from "../../ai/voice";
+import { testSpeech, transcribe } from "../../ai/voice";
 import type { LocalSettings } from "../../ai/local";
 
 /** Longest a recording can run, so a forgotten microphone cannot record for ever. */
@@ -50,7 +50,9 @@ export function useDictation(settings: LocalSettings, onText: (text: string) => 
       const text = await transcribe(settings, new Blob(chunks.current, { type: rec.mimeType }));
       setWorking(false);
       if (text === null) {
-        setError("No transcription came back. Is the speech server running on this computer?");
+        // Say why: the server may not be there, or it may have no speech model.
+        const check = await testSpeech(settings);
+        setError(`No words came back. ${check.message} ${check.fix ?? ""}`.trim());
         return;
       }
       setError(null);

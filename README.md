@@ -93,7 +93,20 @@ So pm-hub:
 
 ### The microphone
 
-The microphone needs a **speech server** — a different program from the chat model, because Ollama does not transcribe. pm-hub checks for one *before* it starts recording, and tells you the command to start it if there is not one.
+The microphone needs a **speech server** — a different program from the chat model, because Ollama does not transcribe. pm-hub checks for one *before* it starts recording, and tells you the command to start it if there is not one:
+
+```
+docker run -p 8000:8000 ghcr.io/speaches-ai/speaches:latest-cpu
+```
+
+A speech server also needs a speech model, which it may not have yet:
+
+```
+curl -X POST http://localhost:8000/v1/models/Systran/faster-whisper-base \
+  -H 'Content-Type: application/json' -d '{"type": "speech-to-text"}'
+```
+
+The names these servers use are nothing like `whisper-1`, so pm-hub **asks the server what it has** and uses one of its own models rather than a name that would fail every time. *Settings → Local model → What speech models does it have?* lists them.
 
 ### Is the AI working?
 

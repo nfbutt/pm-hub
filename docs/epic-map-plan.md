@@ -131,7 +131,7 @@ What was built:
 
 Still to do in this phase: a model filling in what the grammar cannot parse, and the relative-date expressions ("to the 15th", "before the release").
 
-**Phase 16 — the voice loop — done.** Push to talk on `Ctrl+Shift+Space`, the app answering out loud, directive prompts instead of yes/no questions, and every spoken answer paired with something visible.
+**Phase 16 — the voice loop — done.** Push to talk on `Ctrl+Shift+Space`, the app answering out loud, directive prompts instead of yes/no questions, and every spoken answer paired with something visible. The microphone needs the **speech server**, not the chat model, so it is not gated on the model being turned on; and because those servers name their models nothing like `whisper-1` (`Systran/faster-whisper-base`), pm-hub asks the server what it has and uses one of its own.
 
 **Phase 17 — together — done.** A proposal in the shared plan history, the comments on the plan's own issues read back so a colleague's writing is visible, and the last-second race between the check and the apply closed.
 

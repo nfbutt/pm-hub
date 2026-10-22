@@ -2,9 +2,10 @@ import { labelPrefixes, type LaneRule, type Mapping, type ReleaseRule } from "..
 import type { Project } from "../model/normalize";
 import type { Prefs } from "../store/cache";
 import {
-  DEFAULT_CONTEXT, DEFAULT_MAX_TOKENS, DEFAULT_TIMEOUT, DEFAULT_VOICE_BASE, defaultLocal, forgetModels, listModels, testModel, type ModelCheck,
+  DEFAULT_CONTEXT, DEFAULT_MAX_TOKENS, DEFAULT_TIMEOUT, DEFAULT_VOICE_BASE, DEFAULT_VOICE_MODEL, defaultLocal, forgetModels, listModels, testModel, type ModelCheck,
 } from "../ai/local";
 import { useState } from "react";
+import { listVoiceModels } from "../ai/voice";
 import { keyIsRemembered, readApiKey, writeApiKey } from "../store/key";
 import type { ReactNode } from "react";
 
@@ -41,6 +42,15 @@ export function Settings({ project, mapping, setMapping, resetMapping, prefs, se
     const found = await listModels(local);
     setInstalled(found);
     setListing(false);
+  };
+  // The speech models the server has, which are named nothing like "whisper-1".
+  const [voiceModels, setVoiceModels] = useState<string[] | null>(null);
+  const [listingVoice, setListingVoice] = useState(false);
+  const findVoiceModels = async () => {
+    setListingVoice(true);
+    const found = await listVoiceModels(local.voiceBase ?? DEFAULT_VOICE_BASE);
+    setVoiceModels(found ?? []);
+    setListingVoice(false);
   };
   const probeConnection = async () => {
     setProbing(true);
@@ -252,6 +262,31 @@ export function Settings({ project, mapping, setMapping, resetMapping, prefs, se
             A separate server for turning speech into text, such as Speaches. The chat model usually cannot do it.
             The microphone in the top bar sends your voice there, and nowhere else.
           </span>
+        </div>
+        <div className="setting">
+          <label htmlFor="ai-voice-model">Speech model</label>
+          <input id="ai-voice-model" className="input" value={local.voiceModel ?? DEFAULT_VOICE_MODEL}
+            onChange={e => setLocal({ voiceModel: e.target.value })} />
+          <span className="muted">
+            Speaches calls these by their full name, such as <code>Systran/faster-whisper-base</code>, not
+            <code> whisper-1</code>. If the name is not one the server has, pm-hub uses one it does have.
+          </span>
+        </div>
+        <div className="drow">
+          <button className="btn" onClick={() => void findVoiceModels()} disabled={listingVoice}>
+            {listingVoice ? "Looking…" : "What speech models does it have?"}
+          </button>
+          {voiceModels && voiceModels.length > 0 && (
+            <span className="muted" style={{ fontSize: 12 }}>
+              {voiceModels.map(id => (
+                <span key={id} style={{ marginRight: 10, whiteSpace: "nowrap" }}>
+                  <code>{id}</code>{" "}
+                  <button className="linkbtn" onClick={() => setLocal({ voiceModel: id })}>use</button>
+                </span>
+              ))}
+            </span>
+          )}
+          {voiceModels && !voiceModels.length && <span className="muted" style={{ fontSize: 12 }}>Nothing answered there, or it has no speech model yet.</span>}
         </div>
         <div className="drow">
           <button className="btn primary" onClick={probeConnection} disabled={probing}>{probing ? "Testing…" : "Test the connection"}</button>

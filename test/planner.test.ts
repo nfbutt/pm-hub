@@ -218,11 +218,27 @@ describe("the microphone", () => {
   });
 
   it("sends the recording to the speech server and takes the words back", async () => {
-    const mock = vi.fn(async (_url: string, _init?: RequestInit) => ({ ok: true, status: 200, json: async () => ({ text: "a billing rework" }) }));
+    const mock = vi.fn(async (url: string, _init?: RequestInit) => (
+      url.endsWith("/models")
+        ? { ok: true, status: 200, json: async () => ({ data: [{ id: "Systran/faster-whisper-base" }] }) }
+        : { ok: true, status: 200, json: async () => ({ text: "a billing rework" }) }));
     vi.stubGlobal("fetch", mock);
     const text = await transcribe({ ...settings, voiceBase: "http://localhost:8000/v1" }, new Blob(["x"]));
     expect(text).toBe("a billing rework");
-    expect(mock.mock.calls[0]![0]).toBe("http://localhost:8000/v1/audio/transcriptions");
+    expect(mock.mock.calls.map(c => c[0])).toContain("http://localhost:8000/v1/audio/transcriptions");
+  });
+
+  it("names the model the server actually has, not the one that was asked for", async () => {
+    // Speaches calls its models "Systran/faster-whisper-base". Asking for "whisper-1"
+    // would fail every time, and the microphone would look broken.
+    const mock = vi.fn(async (url: string, _init?: RequestInit) => (
+      url.endsWith("/models")
+        ? { ok: true, status: 200, json: async () => ({ data: [{ id: "Systran/faster-whisper-base" }] }) }
+        : { ok: true, status: 200, json: async () => ({ text: "words" }) }));
+    vi.stubGlobal("fetch", mock);
+    await transcribe({ ...settings, voiceBase: "http://localhost:8000/v1", voiceModel: "whisper-1" }, new Blob(["x"]));
+    const body = mock.mock.calls[1]![1]!.body as FormData;
+    expect(body.get("model")).toBe("Systran/faster-whisper-base");
   });
 
   it("gives up quietly when the server is not there", async () => {
@@ -232,7 +248,7 @@ describe("the microphone", () => {
 });
 
 import { matchEpics, splitInput } from "../src/model/plan/match";
-import { amendmentOps, epicStories, type Amendments } from "../src/model/plan/amend";
+import { amendmentOps, cleanTitle, epicStories, tidyAmendments, type Amendments } from "../src/model/plan/amend";
 import { checkAmend } from "../src/ai/plan";
 const epic = (title: string) => project.items.find(i => i.title === title)!;
 
@@ -281,6 +297,42 @@ describe("tidying an epic", () => {
     expect(changes).toHaveLength(2);
     expect(changes[0]!.kind).toBe("add");
     expect(changes[1]!.kind).toBe("rename");
+  });
+
+  it("takes the titles from the project, not from the model's echo of them", () => {
+    // A model tends to copy the line it was shown, key and all. The project already
+    // knows what every story is called.
+    const a = epic("Billing and invoices");
+    const stories = epicStories(project, a);
+    const answer: Amendments = {
+      add: [{ title: `${stories[0]!.key} | Notify the customer`, why: "It was missing.", days: 3 }],
+      rename: [{ key: stories[0]!.key, from: `${stories[0]!.key} | ${stories[0]!.title}`, to: `${stories[0]!.key} | A better name`, why: "Clearer." }],
+      overlap: [{ keys: [stories[0]!.key, stories[1]!.key], titles: [`${stories[0]!.key} | One`, `${stories[1]!.key} | Two`], why: "They repeat." }],
+    };
+    const tidy = tidyAmendments(project, a, answer);
+    expect(tidy.rename[0]!.from).toBe(stories[0]!.title);
+    expect(tidy.rename[0]!.to).toBe("A better name");
+    expect(tidy.add[0]!.title).toBe("Notify the customer");
+    expect(tidy.overlap[0]!.titles).toEqual([stories[0]!.title, stories[1]!.title]);
+    // And the story that is really renamed ends up with a clean title.
+    const changes = amendmentOps(project, a, tidy, new Set([`rename:${stories[0]!.key}`]));
+    expect(changes[0]!.ops[0]).toMatchObject({ kind: "setTitle", after: "A better name" });
+  });
+
+  it("drops a change about a story the epic does not have", () => {
+    const a = epic("Billing and invoices");
+    const answer: Amendments = {
+      add: [], rename: [{ key: "o/r#999", from: "Nothing", to: "Something", why: "" }], overlap: [],
+    };
+    expect(tidyAmendments(project, a, answer).rename).toHaveLength(0);
+  });
+
+  it("leaves a title alone when the key is part of the title", () => {
+    expect(cleanTitle("Q1-2026 planning")).toBe("Q1-2026 planning");
+    expect(cleanTitle("PMH-13 | Show invoices")).toBe("Show invoices");
+    expect(cleanTitle("PMH-13: Show invoices")).toBe("Show invoices");
+    expect(cleanTitle("demo-co/orbit#113 | Show invoices")).toBe("Show invoices");
+    expect(cleanTitle("ACME-2 integration")).toBe("ACME-2 integration");
   });
 
   it("puts a new story under the epic when it is applied", () => {

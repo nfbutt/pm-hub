@@ -121,6 +121,7 @@ export function promptAmend(epic: { title: string; body: string }, stories: { ke
     '"rename": [{"key": "<story key>", "from": "<its title>", "to": "<a better title>", "why": "one line"}],',
     '"overlap": [{"keys": ["<key>", "<key>"], "titles": ["<title>", "<title>"], "why": "one line"}]}.',
     "Only suggest a story that is really missing, and only rename when the new name says something the old one does not.",
+    "A title is just the title. Do not put the key, a pipe, or a description in it.",
   ].filter(Boolean).join("\n");
 }
 

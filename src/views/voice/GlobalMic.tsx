@@ -23,8 +23,8 @@ export function GlobalMic({ settings }: { settings: LocalSettings }) {
         target = active && /^(INPUT|TEXTAREA)$/.test(active.tagName) ? active : null;
         dictation.toggle();
       }}
-        disabled={dictation.working || !settings.enabled}
-        title={settings.enabled ? "Say it instead of typing it" : "Turn on a local model in Settings to use speech"}>
+        disabled={dictation.working}
+        title="Say it instead of typing it. The recording goes to the speech server on this computer.">
         {dictation.listening ? "◼" : dictation.working ? "…" : "🎤"}
       </button>
       {dictation.error && <span className="muted" style={{ fontSize: 12, color: "var(--bad)" }}>{dictation.error}</span>}
