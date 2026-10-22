@@ -10,7 +10,7 @@ import {
   defaultLocal, forgetModels, serverStatus, testModel, type LocalSettings, type ModelCheck,
 } from "../ai/local";
 import { listVoiceModels, testSpeech, type SpeechCheck } from "../ai/voice";
-import { describeModel, recommendModels } from "../ai/recommend";
+import { describeModel, isThinking, recommendModels } from "../ai/recommend";
 import { keyIsRemembered, readApiKey, writeApiKey } from "../store/key";
 import type { Prefs } from "../store/cache";
 
@@ -180,6 +180,21 @@ export function Ai({ prefs, setPrefs }: { prefs: Prefs; setPrefs: (p: Prefs) => 
         <div className="setting">
           <label htmlFor="ai-chat">Chat model</label>
           <input id="ai-chat" className="input" value={local.chatModel} onChange={e => setLocal({ chatModel: e.target.value })} />
+          {isThinking(local.chatModel) && (
+            <span className="muted" style={{ display: "block", color: "var(--warn)" }}>
+              <b>{local.chatModel} thinks before it answers.</b> It can take minutes, and a plan is exactly the kind of
+              thing it overthinks.{" "}
+              {rec?.chat && rec.chat !== local.chatModel && (
+                <button className="linkbtn" onClick={() => setLocal({ chatModel: rec.chat! })}>Use {rec.chat} instead</button>
+              )}
+            </span>
+          )}
+          {server?.models.length && !server.models.some(m => m === local.chatModel) && !isThinking(local.chatModel) && (
+            <span className="muted" style={{ display: "block", color: "var(--warn)" }}>
+              The server does not have <b>{local.chatModel}</b>.{" "}
+              {rec?.chat && <button className="linkbtn" onClick={() => setLocal({ chatModel: rec.chat! })}>Use {rec.chat}</button>}
+            </span>
+          )}
         </div>
         <div className="setting">
           <label htmlFor="ai-embed">Embedding model</label>
