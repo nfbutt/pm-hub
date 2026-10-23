@@ -168,3 +168,22 @@
 .plan-sugg .emap-list { gap: 5px; }
 .plan-sugg .good { color: var(--good); font-weight: 700; }
 .plan-sugg .muted { font-size: 12px; }
+
+/* The card over the map: a whole title, and for a task the way to its issue. */
+.emap-peek { position: absolute; z-index: 6; transform: translateX(-50%); width: max-content; max-width: 300px; display: grid; gap: 4px;
+  padding: 10px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); font-size: 13px; line-height: 1.4; }
+.emap-peek.epic { border-top: 3px solid var(--accent); }
+.emap-peek.above { transform: translate(-50%, -100%); }
+.emap-peek-title { font-weight: 600; overflow-wrap: anywhere; }
+.emap-peek .muted { font-size: 12px; }
+.emap-peek-note { font-size: 12px; color: var(--bad); }
+.emap-peek-links { display: flex; gap: 12px; align-items: center; padding-top: 4px; border-top: 1px solid var(--line-soft); margin-top: 2px; font-size: 12px; }
+.emap-peek-links a { color: var(--accent); }
+.emap-peek-links .linkbtn { padding: 0; color: var(--accent); }
+
+/* The epics' names: one size at any zoom, as wide as the bubble, over it. Hover for the rest. */
+.emap-titles { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 2; }
+.emap-title { position: absolute; transform: translate(-50%, -100%); margin-top: -3px; padding: 1px 7px; border-radius: 6px;
+  font-size: 12.5px; font-weight: 600; line-height: 1.35; color: var(--fg); background: color-mix(in srgb, var(--surface) 82%, transparent);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.emap-title.tray, .emap-title.ghost { color: var(--muted); font-weight: 500; }
