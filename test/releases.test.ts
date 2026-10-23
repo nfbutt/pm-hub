@@ -287,6 +287,16 @@ describe("writing releases to GitHub", () => {
     expect(g2.rest[0]).toMatchObject({ method: "PATCH", body: { state: "closed" } });
   });
 
+  it("refuses a repository name that is not a plain owner/name, or not one of the project's", async () => {
+    // A rollback can carry ops from the shared history, which other people write.
+    for (const repo of ["../../user", "demo-co/orbit/../../x", "demo-co/..", "demo-co/orbit?x=1", "someone/else"]) {
+      const g = fake();
+      const res = await execute(g.client, project, buildSteps([{ kind: "milestone", ref: `${repo}#R`, repo, before: null, after: { title: "R", dueOn: null, state: "open" } }], titleOf), new Map(), repos());
+      expect(res.steps[0]!.status).toBe("failed");
+      expect(g.rest).toEqual([]);
+    }
+  });
+
   it("uses a release that is already on GitHub instead of making it twice, and writes nothing in a dry run", async () => {
     const g = fake();
     const res = await execute(g.client, project, buildSteps([{ kind: "milestone", ref: "demo-co/orbit#Release 3", repo: "demo-co/orbit", before: null, after: { title: "Release 3", dueOn: null, state: "open" } }], titleOf), new Map(), repos());

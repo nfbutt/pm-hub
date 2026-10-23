@@ -18,7 +18,21 @@ export interface Call { doc: string; name: string; vars: Record<string, unknown>
  * these few writes go through its REST API. They are made here and nowhere else, and only
  * ever to a repository's milestones (test/write-guard.test.ts).
  */
-const milestonesPath = (repo: string, number?: number) => `/repos/${repo}/milestones${number ? `/${number}` : ""}`;
+const milestonesPath = (repo: string, number?: number) => {
+  const [owner, name] = checkedRepo(repo);
+  return `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/milestones${number ? `/${Math.trunc(number)}` : ""}`;
+};
+
+/**
+ * A repository name goes into a URL, and a rollback can carry one from the shared plan
+ * history, which other people write. Only a plain "owner/name" is let through: never
+ * "..", never an extra slash, so a crafted record cannot point a write anywhere else.
+ */
+function checkedRepo(repo: string): [string, string] {
+  const m = /^([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)$/.exec(repo);
+  if (!m || [m[1], m[2]].some(part => /^\.+$/.test(part!))) throw new ApplyError(`“${repo}” is not a repository name.`);
+  return [m[1]!, m[2]!];
+}
 /** Midday UTC, so the due date reads as the same day wherever GitHub shows it. */
 const dueOnInput = (d: string | null) => (d ? `${d.slice(0, 10)}T12:00:00Z` : null);
 interface RestMilestone { number: number; node_id: string; title: string; state: string; due_on: string | null }
@@ -337,6 +351,8 @@ export async function execute(client: GitHubClient, base: Project, steps: Step[]
     const op = s.op as Extract<Op, { kind: "milestone" }>;
     update(s, { status: "applying" });
     try {
+      // Releases are only made in repositories this project's issues live in.
+      if (!base.items.some(i => i.repo === op.repo)) throw new ApplyError(`${op.repo} is not one of this project's repositories.`);
       const message = await applyMilestone(client, op, repos, log, !!opts.dryRun);
       update(s, { status: "applied", message: opts.dryRun ? "Dry run" : message });
     } catch (e) {
