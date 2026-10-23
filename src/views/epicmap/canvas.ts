@@ -12,12 +12,23 @@ cytoscape.use(fcose);
 /** Where a task was dropped: an epic key, null for "no epic", undefined for nowhere new. */
 export type DropTarget = string | null | undefined;
 
+/** Where an epic's name goes on the canvas: above its bubble, as wide as the bubble. */
+/** `kind` says how to draw it: an epic, the "No epic" tray, or a kind of work that has no epic. */
+export interface EpicTitle { key: string; kind: "epic" | "tray" | "ghost"; title: string; x: number; y: number; width: number }
+
+/** What the pointer is over, and where on the canvas to show its card. */
+export interface Peek { key: string; kind: "epic" | "task"; x: number; y: number }
+
 export interface CanvasEvents {
   open: (key: string) => void;
   hover: (taskKey: string, target: DropTarget) => void;
   drop: (taskKey: string, target: string | null) => void;
   /** A gap bubble was clicked: show the suggestion that would fill it. */
   gap: (category: string) => void;
+  /** The pointer is over an epic or a task (or, with null, nothing). `now` hides at once: the map moved. */
+  peek?: (p: Peek | null, now?: boolean) => void;
+  /** Where each epic's name should be drawn, whenever the map moves. */
+  titles?: (titles: EpicTitle[]) => void;
 }
 
 export interface MapCanvas {
@@ -56,9 +67,11 @@ function elements(model: EpicMapModel, lens: Lens): ElementDefinition[] {
   const catOf = (node: LensNode) => (lens === "category" ? node.category : colours!.get(lensValue(lens, node)) ?? "other");
   for (const e of model.epics) {
     const health = e.health === null ? "no tasks" : `health ${e.health}`;
-    out.push({ group: "nodes", data: { id: epicId(e.key), kind: "epic", cat: catOf(e), group: lensValue(lens, e), label: `${clip(e.title, 40)}\n${health} · ${e.taskKeys.length} task${e.taskKeys.length === 1 ? "" : "s"}` } });
+    // The name is drawn by the page, at a size that stays readable at any zoom; the
+    // canvas keeps the counts, which can disappear when zoomed out.
+    out.push({ group: "nodes", data: { id: epicId(e.key), kind: "epic", cat: catOf(e), group: lensValue(lens, e), title: e.title, label: `${health} · ${e.taskKeys.length} task${e.taskKeys.length === 1 ? "" : "s"}` } });
   }
-  out.push({ group: "nodes", data: { id: TRAY, kind: "tray", cat: "other", group: "No epic", label: "No epic\ndrop here to take a task out" } });
+  out.push({ group: "nodes", data: { id: TRAY, kind: "tray", cat: "other", group: "No epic", title: "No epic", label: "drop here to take a task out" } });
   for (const t of model.tasks) {
     out.push({
       group: "nodes", classes: [t.state !== "open" ? "closed" : "", t.misfit ? "misfit" : ""].filter(Boolean).join(" "),
@@ -67,7 +80,7 @@ function elements(model: EpicMapModel, lens: Lens): ElementDefinition[] {
   }
   model.gaps.forEach(g => {
     const id = `g:${g.category}`;
-    out.push({ group: "nodes", data: { id, kind: "ghost", cat: g.category, group: categoryName(g.category), label: `No ${categoryName(g.category)} epic\n${g.taskKeys.length} tasks · click to create` } });
+    out.push({ group: "nodes", data: { id, kind: "ghost", cat: g.category, group: categoryName(g.category), title: `No ${categoryName(g.category)} epic`, label: `${g.taskKeys.length} tasks · click to create` } });
     for (const k of g.taskKeys.slice(0, 6)) out.push({ group: "edges", classes: "gapline", data: { id: `gl:${g.category}:${k}`, source: id, target: taskId(k) } });
   });
   for (const o of model.overlaps.slice(0, 10)) {
@@ -106,6 +119,7 @@ export function mountCanvas(container: HTMLElement, on: CanvasEvents): MapCanvas
         "font-size": 17, "font-weight": 700, "text-margin-y": -8, "text-max-width": "240px", "line-height": 1.35, "min-zoomed-font-size": 11,
       } },
       { selector: 'node[kind="epic"]', style: {
+        "font-size": 11, "font-weight": 500, color: c.muted, "text-valign": "bottom", "text-margin-y": 6,
         "background-color": (n: NodeSingular) => c.cat(n.data("cat")), "background-opacity": 0.1,
         "border-color": (n: NodeSingular) => c.cat(n.data("cat")), "border-width": 2, "border-opacity": 0.55,
         "min-width": "90px", "min-height": "60px",
@@ -192,6 +206,32 @@ export function mountCanvas(container: HTMLElement, on: CanvasEvents): MapCanvas
   });
   cy.on("mouseout", 'node[kind="task"]', () => { cy.$(".lit").removeClass("lit"); cy.$(".dim").removeClass("dim"); });
 
+  // What is under the pointer, for the card that gives its whole title and its links. On
+  // the core, so the target is the very node under the pointer, not an epic it bubbled to.
+  cy.on("mouseover", ev => {
+    if (drag || !on.peek || ev.target === cy) return;
+    const n = ev.target as NodeSingular;
+    const kind = n.isNode?.() ? n.data("kind") : null;
+    if (kind !== "task" && kind !== "epic") return;
+    const bb = n.renderedBoundingBox({ includeLabels: false });
+    // A task's card sits just under its dot; an epic's just above its bubble, over the
+    // shortened name, so it never covers the tasks inside.
+    on.peek({ key: keyOf(n.id()), kind, x: (bb.x1 + bb.x2) / 2, y: kind === "task" ? bb.y2 + 2 : bb.y1 - 4 });
+  });
+  cy.on("mouseout", ev => { if (ev.target !== cy && (ev.target as NodeSingular).isNode?.()) on.peek?.(null); });
+  cy.on("viewport grab", () => on.peek?.(null, true));
+
+  // The epics' names follow the map: once a frame at most, whenever anything is drawn.
+  let frame = 0;
+  const placeTitles = () => {
+    frame = 0;
+    on.titles?.(cy.nodes('node[kind="epic"], node[kind="tray"], node[kind="ghost"]').map(n => {
+      const bb = n.renderedBoundingBox({ includeLabels: false });
+      return { key: n.id(), kind: n.data("kind"), title: String(n.data("title") ?? ""), x: (bb.x1 + bb.x2) / 2, y: bb.y1, width: bb.x2 - bb.x1 };
+    }));
+  };
+  cy.on("render", () => { if (on.titles && !frame) frame = requestAnimationFrame(placeTitles); });
+
   cy.on("tap", 'node[kind="task"], node[kind="epic"]', ev => on.open(keyOf((ev.target as NodeSingular).id())));
   cy.on("tap", 'node[kind="ghost"]', ev => on.gap((ev.target as NodeSingular).id().slice(2)));
 
@@ -250,6 +290,7 @@ export function mountCanvas(container: HTMLElement, on: CanvasEvents): MapCanvas
       setTimeout(() => cy.$(".focus").removeClass("focus"), 1800);
     },
     destroy() {
+      if (frame) cancelAnimationFrame(frame);
       layout?.stop();
       media.removeEventListener("change", restyle);
       themeWatch.disconnect();

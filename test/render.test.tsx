@@ -20,6 +20,8 @@ import { CommandMenu } from "../src/ui/CommandMenu";
 import { buildSchedule } from "../src/model/schedule";
 import { Dependencies, layoutGraph } from "../src/views/Dependencies";
 import { EpicMap } from "../src/views/EpicMap";
+import { PeekCard } from "../src/views/epicmap/PeekCard";
+import { analyze } from "../src/model/epicmap";
 import { EpicLinks } from "../src/views/EpicLinks";
 import { MeetingMode } from "../src/views/epicmap/MeetingMode";
 import { Roadmap } from "../src/views/Roadmap";
@@ -55,6 +57,21 @@ describe("views render with the demo project", () => {
     expect(ro).toContain("Read-only");
     expect(ro).not.toContain("Accept");
     expect(ro).not.toContain("Snooze");
+  });
+
+  it("The Epic Map's hover card gives the whole title, and a task's way to its issue", () => {
+    const model = analyze(project, mapping, { openOnly: true });
+    const items = new Map(project.items.map(i => [i.key, i]));
+    const task = model.tasks.find(t => t.epicKey && items.get(t.key)?.url)!;
+    const card = renderToString(<PeekCard peek={{ key: task.key, kind: "task", x: 200, y: 100 }} model={model} byKey={items} width={800} onOpen={noop} onEnter={noop} onLeave={noop} />);
+    expect(card).toContain(task.title);
+    expect(card).toContain(`href="${items.get(task.key)!.url}"`);
+    expect(card).toContain(`in ${model.epics.find(e => e.key === task.epicKey)!.title}`);
+    expect(card).toContain("Details");
+    const epic = model.epics[0]!;
+    const epicCard = renderToString(<PeekCard peek={{ key: epic.key, kind: "epic", x: 200, y: 300 }} model={model} byKey={items} width={800} onOpen={noop} onEnter={noop} onLeave={noop} />);
+    expect(epicCard).toContain(epic.title);
+    expect(epicCard).toContain(`${epic.taskKeys.length} task`);
   });
 
   it("Meeting mode shows one item at a time and a tally", () => {

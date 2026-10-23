@@ -18,6 +18,8 @@ import type { HistoryState } from "./useHistory";
 import type { DropTarget, MapCanvas } from "./epicmap/canvas";
 import { MeetingMode, type AgendaItem, type MeetingTally } from "./epicmap/MeetingMode";
 import { Suggestions } from "./epicmap/Suggestions";
+import { PeekCard, usePeek } from "./epicmap/PeekCard";
+import type { EpicTitle } from "./epicmap/canvas";
 import { Timelapse } from "./epicmap/Timelapse";
 import { PlanProblems } from "./plan/PlanProblems";
 import { useLocalChat, useLocalVectors } from "./useLocalModel";
@@ -88,6 +90,9 @@ export function EpicMap({ project, mapping, draft, editor, local, history, revie
 
   const box = useRef<HTMLDivElement>(null);
   const canvas = useRef<MapCanvas | null>(null);
+  const peek = usePeek();
+  const [titles, setTitles] = useState<EpicTitle[]>([]);
+  const items = useMemo(() => new Map(project.items.map(i => [i.key, i])), [project]);
   const latest = useRef({ move, model, lens });
   latest.current = { move, model, lens };
   const [failed, setFailed] = useState(false);
@@ -96,8 +101,10 @@ export function EpicMap({ project, mapping, draft, editor, local, history, revie
     import("./epicmap/canvas").then(({ mountCanvas }) => {
       if (dead || !box.current) return;
       canvas.current = mountCanvas(box.current, {
-        open: setOpen,
+        open: key => { peek.close(); setOpen(key); },
         hover: (key, target) => setHover(target === undefined ? null : { key, target }),
+        peek: peek.report,
+        titles: setTitles,
         drop: (key, target) => latest.current.move(key, target),
         // Clicking a gap bubble points at the suggestion that would fill it.
         gap: category => {
@@ -181,6 +188,15 @@ export function EpicMap({ project, mapping, draft, editor, local, history, revie
             aria-label="Map of epics and their tasks. Everything it shows is also in the panel beside it, which reads as text." />
           {failed && <p className="callout bad emap-float">The map couldn't load. Reload the page to try again.</p>}
           {!editor && <span className="pill emap-float">Read-only: turn off “GitHub only” to move tasks</span>}
+          <div className="emap-titles" aria-hidden="true">
+            {titles.map(t => (
+              <span key={t.key} className={`emap-title ${t.kind}`} style={{ left: t.x, top: t.y, maxWidth: Math.max(60, t.width + 24) }}>{t.title}</span>
+            ))}
+          </div>
+          {peek.peek && !hover && (
+            <PeekCard peek={peek.peek} model={model} byKey={items} width={box.current?.clientWidth ?? 800}
+              onOpen={key => { peek.close(); setOpen(key); }} onEnter={peek.enter} onLeave={peek.leave} />
+          )}
           {hover && (
             <div className={`emap-preview ${delta === null ? "" : delta > 0 ? "up" : delta < 0 ? "down" : ""}`} aria-live="polite">
               Drop into <b>{title(hover.target ?? null)}</b>{delta !== null && <>: score {delta > 0 ? "+" : ""}{delta}</>}
