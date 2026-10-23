@@ -15,7 +15,7 @@ Pick one of your GitHub Projects. pm-hub reads its items, field values, mileston
 | Overview | Counts, how the project's fields were interpreted, open epics with progress |
 | Gantt | Epics as bars in swimlanes, release markers, conflict flags. Drag to move or resize, drag a story onto another epic, draw a dependency between bars, rename in place, add stories. The dependencies are drawn between the bars, and the chain that decides the end date is marked |
 | Plan | An editable table of epics and their stories: inline cells, multi-select bulk edits, copy and paste between cells |
-| Releases | One column per milestone or iteration, with what ships and how much is done |
+| Releases | Releases as a plan of epics: every release on one line of time with how far along it is, and a board of epics you drag between releases (an epic's open stories go with it). Make a release, set its date, and see what stops a release making its date, with a fix for each |
 | Schedule | Calendar of due dates, sprint starts and epic starts and ends |
 | Progress | Each epic's work done against how much of its time has passed |
 | Status & workload | Status counts, open work per person per week, items missing dates or owners |
@@ -25,6 +25,7 @@ Pick one of your GitHub Projects. pm-hub reads its items, field values, mileston
 | Epic Map | Epics as bubbles of tasks: overlaps, misplaced tasks, kinds of work with no epic, a structure score; drag tasks between epics; a deck of suggestions you can accept or turn down; meeting mode, a timelapse of the plan and goals to work towards |
 | Roadmap | Every epic on one timeline with the dependencies drawn between them: the chain that decides when the plan ends, how much slack each epic has, and what is broken about the plan as it stands |
 | Planner | Three questions: is this already here (does an epic cover these stories?), write it (an epic with a description and subtasks, or a whole plan), or tidy an epic (what is missing, what is named badly, what repeats). You review everything, then it becomes one change |
+| Epic links | Every open epic as a card, laid out by what waits for what. Drag from one epic to another to say it has to finish first; see where two epics overlap; links the issues themselves state ("depends on the pricing engine") are suggested with the quote |
 | Compare | Two epics side by side: what each covers, what they have in common, what only one has. Drag a story from one to the other to move it |
 | Settings | Change how dates, epics, swimlanes, releases and priority are read; fiscal-year quarters |
 | Review | Every pending change with before and after, checked against GitHub, then applied |
@@ -72,7 +73,7 @@ Epics and stories change all the time: they get re-dated, re-scoped, split, move
 - The token is sent **only** to `api.github.com`, in a request header. A Content-Security-Policy in the built page blocks every other destination except Google Fonts.
 - By default the token is kept in `sessionStorage` and forgotten when you close the tab. "Remember on this device" keeps it in `localStorage`.
 - Project data is cached in your browser's IndexedDB so the next visit is instant. There is no server, no database and no analytics.
-- pm-hub writes to GitHub **only** when you press Apply on the review screen, or save history to a repo you chose. Every project and issue write lives in `src/github/mutations.ts` and is sent only by `src/github/apply.ts`; history files are written only by `src/github/contents.ts`, through the contents API. `test/write-guard.test.ts` enforces all three.
+- pm-hub writes to GitHub **only** when you press Apply on the review screen, or save history to a repo you chose. Every project and issue write lives in `src/github/mutations.ts` and is sent only by `src/github/apply.ts`; history files are written only by `src/github/contents.ts`, through the contents API. Releases are milestones, which GraphQL cannot make, so `apply.ts` also makes and re-dates milestones over REST, and nothing else. `test/write-guard.test.ts` enforces all of it.
 - Loading a project costs about 35 GraphQL points per 100 items, out of GitHub's 5,000 per hour. A warning appears when fewer than 500 remain.
 
 ### Light and dark

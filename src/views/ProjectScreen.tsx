@@ -32,6 +32,7 @@ const BurnUp = lazy(() => import("./BurnUp").then(m => ({ default: m.BurnUp })))
 const Confidence = lazy(() => import("./Confidence").then(m => ({ default: m.Confidence })));
 const Dependencies = lazy(() => import("./Dependencies").then(m => ({ default: m.Dependencies })));
 const EpicMap = lazy(() => import("./EpicMap").then(m => ({ default: m.EpicMap })));
+const EpicLinks = lazy(() => import("./EpicLinks").then(m => ({ default: m.EpicLinks })));
 const Roadmap = lazy(() => import("./Roadmap").then(m => ({ default: m.Roadmap })));
 const Planner = lazy(() => import("./Planner").then(m => ({ default: m.Planner })));
 const Compare = lazy(() => import("./Compare").then(m => ({ default: m.Compare })));
@@ -61,6 +62,7 @@ const GROUPS: { label: string; views: { id: ViewId; label: string }[] }[] = [
   ] },
   { label: "Shape", views: [
     { id: "epics", label: "Epic Map" },
+    { id: "links", label: "Epic links" },
     { id: "planner", label: "Planner" },
     { id: "compare", label: "Compare" },
   ] },
@@ -232,7 +234,8 @@ export function ProjectScreen({ source, view, onSignOut, onTokenRejected, onChan
             {active === "gantt" && <Gantt project={shown} mapping={mapping} draft={draft} editor={editor} changed={githubOnly ? 0 : cs.net.length} onDiscardAll={editor ? cs.clear : undefined} prefs={prefs} setPrefs={setPrefs} selected={selected} onSelect={setSelected}
               baselines={history.baselines} compare={compare} onCompare={id => compareTo(id)} />}
             {active === "plan" && <Plan project={shown} mapping={mapping} draft={draft} editor={editor} selected={selected} onSelect={setSelected} />}
-            {active === "releases" && <Releases project={shown} mapping={mapping} draft={draft} />}
+            {active === "releases" && <Releases project={shown} mapping={mapping} draft={draft} editor={editor} local={prefs.local} aiHref={hrefFor(routeFor("ai"))} />}
+            {active === "links" && <EpicLinks project={shown} mapping={mapping} draft={draft} editor={editor} local={prefs.local} aiHref={hrefFor(routeFor("ai"))} />}
             {active === "schedule" && <Schedule project={shown} mapping={mapping} draft={draft} />}
             {active === "progress" && <Progress project={shown} mapping={mapping} draft={draft} />}
             {active === "workload" && <Workload project={shown} mapping={mapping} draft={draft} />}

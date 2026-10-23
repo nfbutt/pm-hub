@@ -60,6 +60,7 @@ export function Review({ base, groups, titleOf, client, onApplied, onRecord, ref
       const repoNames = new Set<string>();
       for (const op of ops) {
         if (op.kind === "create" && op.item.repo) repoNames.add(op.item.repo);
+        if (op.kind === "milestone") repoNames.add(op.repo);
         if (op.kind === "setLabels" || op.kind === "setMilestone" || op.kind === "setAssignees") { const r = (current.get(op.key) ?? base.items.find(i => i.key === op.key))?.repo; if (r) repoNames.add(r); }
       }
       const repos = new Map<string, RepoMeta>();

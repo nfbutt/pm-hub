@@ -13,6 +13,16 @@ import { describe as describeOp, fmtValue, isNewKey, LOCAL_ONLY, slotOf, type Op
 
 export interface Call { doc: string; name: string; vars: Record<string, unknown>; note?: string }
 
+/**
+ * Releases are milestones, and GitHub's GraphQL API cannot make or change a milestone, so
+ * these few writes go through its REST API. They are made here and nowhere else, and only
+ * ever to a repository's milestones (test/write-guard.test.ts).
+ */
+const milestonesPath = (repo: string, number?: number) => `/repos/${repo}/milestones${number ? `/${number}` : ""}`;
+/** Midday UTC, so the due date reads as the same day wherever GitHub shows it. */
+const dueOnInput = (d: string | null) => (d ? `${d.slice(0, 10)}T12:00:00Z` : null);
+interface RestMilestone { number: number; node_id: string; title: string; state: string; due_on: string | null }
+
 export interface RepoMeta { id: string; labels: Record<string, string>; milestones: Record<string, string>; users: Record<string, string> }
 
 export class ApplyError extends Error {}
@@ -115,6 +125,7 @@ export function translate(op: Op, r: Resolver): Call[] {
     case "archive": return [call(ARCHIVE_ITEM, { projectId, itemId: op.itemId ?? r.itemId(op.key) })];
     case "unarchive": return [call(UNARCHIVE_ITEM, { projectId, itemId: op.itemId ?? r.itemId(op.key) })];
     case "create": return []; // run-time only: see execute()
+    case "milestone": return []; // run-time only: the milestone's number is looked up first
     case "park": case "reorder": return [];
   }
 }
@@ -163,6 +174,8 @@ const sameSet = (a: string[], b: string[]) => norm([...a].sort()) === norm([...b
 
 /** Compares a change's "before" with what GitHub has now. */
 export function checkStep(op: Op, now: Item | undefined): { status: "ready" | "conflict" | "already"; theirs?: string } {
+  // A release is not an item: it is looked up by its title when the apply runs.
+  if (op.kind === "milestone") return { status: "ready" };
   if (isNewKey("key" in op ? op.key : "")) return { status: "ready" };
   // An item that was taken out of the project is not in the project any more, so the
   // rollback carries the id GitHub knows it by. It is still there, so it can go back.
@@ -319,6 +332,18 @@ export async function execute(client: GitHubClient, base: Project, steps: Step[]
   for (const s of steps) if (!s.include && s.status !== "local") update(s, { status: "skipped" });
   for (const s of steps) if (s.include && s.status === "already") update(s, { status: "applied", message: "Already like this on GitHub." });
 
+  // Releases first: work put into a new release in the same apply needs it to exist.
+  for (const s of todo.filter(x => x.op.kind === "milestone")) {
+    const op = s.op as Extract<Op, { kind: "milestone" }>;
+    update(s, { status: "applying" });
+    try {
+      const message = await applyMilestone(client, op, repos, log, !!opts.dryRun);
+      update(s, { status: "applied", message: opts.dryRun ? "Dry run" : message });
+    } catch (e) {
+      update(s, { status: "failed", message: errorText(e) });
+    }
+  }
+
   // Creates first, parents before children.
   const creates = todo.filter(s => s.op.kind === "create");
   const createdKeys = new Set(creates.map(s => (s.op as Extract<Op, { kind: "create" }>).key));
@@ -351,7 +376,7 @@ export async function execute(client: GitHubClient, base: Project, steps: Step[]
   }
 
   // Everything else, a few at a time. Changes to an item whose create failed are skipped.
-  const rest = todo.filter(s => s.op.kind !== "create");
+  const rest = todo.filter(s => s.op.kind !== "create" && s.op.kind !== "milestone");
   const failedCreates = new Set(creates.filter(s => s.status === "failed").map(s => (s.op as Extract<Op, { kind: "create" }>).key));
   let next = 0;
   const worker = async () => {
@@ -375,6 +400,35 @@ export async function execute(client: GitHubClient, base: Project, steps: Step[]
   };
   await Promise.all(Array.from({ length: Math.max(1, opts.concurrency ?? 3) }, worker));
   return { steps, created, calls: log };
+}
+
+/**
+ * Makes, changes or closes one milestone. A milestone is found by its title, because a
+ * release made in this draft has no number until GitHub gives it one. Making a release
+ * that is already there is not an error: it is used.
+ */
+async function applyMilestone(client: GitHubClient, op: Extract<Op, { kind: "milestone" }>, repos: Map<string, RepoMeta>, log: Call[], dryRun: boolean): Promise<string | undefined> {
+  const all = await client.rest<RestMilestone[]>("GET", `${milestonesPath(op.repo)}?state=all&per_page=100`);
+  const remember = (m: RestMilestone) => { const meta = repos.get(op.repo); if (meta) meta.milestones[m.title] = m.node_id; };
+  const send = async (method: "POST" | "PATCH", path: string, body: Record<string, unknown>) => {
+    log.push({ doc: "", name: `${method} ${path}`, vars: body });
+    return dryRun ? null : client.rest<RestMilestone>(method, path, body);
+  };
+  if (!op.before) {
+    if (!op.after) return undefined;
+    const there = all.find(m => m.title === op.after!.title && m.state === "open");
+    if (there) { remember(there); return "Already on GitHub."; }
+    const made = await send("POST", milestonesPath(op.repo), { title: op.after.title, due_on: dueOnInput(op.after.dueOn) });
+    if (made) remember(made);
+    else { const meta = repos.get(op.repo); if (meta) meta.milestones[op.after.title] = `<new ${op.after.title}>`; }
+    return made ? `Created milestone ${made.number}` : undefined;
+  }
+  const found = all.find(m => m.title === op.before!.title);
+  if (!found) throw new ApplyError(`${op.repo} has no milestone called “${op.before.title}” any more.`);
+  if (!op.after) { await send("PATCH", milestonesPath(op.repo, found.number), { state: "closed" }); return undefined; }
+  const changed = await send("PATCH", milestonesPath(op.repo, found.number), { title: op.after.title, due_on: dueOnInput(op.after.dueOn), state: "open" });
+  if (changed) remember(changed);
+  return undefined;
 }
 
 export async function postStatusUpdate(client: GitHubClient, projectId: string, status: "ON_TRACK" | "AT_RISK" | "OFF_TRACK" | "COMPLETE" | "INACTIVE", body: string) {

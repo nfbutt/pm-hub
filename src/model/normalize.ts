@@ -67,6 +67,12 @@ export interface Item {
 export interface Project {
   id: string; owner: string; number: number; title: string; url: string; description: string | null;
   fields: FieldDef[]; items: Item[]; loadedAt: string;
+  /**
+   * The open milestones of the project's repositories, including the ones nothing is in
+   * yet: a release you have just made is a release, even before any work is put in it.
+   * Missing on projects cached before pm-hub read them.
+   */
+  milestones?: Milestone[];
 }
 
 const BODY_MAX = 2000;

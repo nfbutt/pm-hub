@@ -66,8 +66,11 @@ export function createClient(token: string, fetchImpl: FetchLike = (i, o) => fet
   /** For mutations: any GraphQL error fails the call. */
   const mutate = <T>(document: string, variables: Record<string, unknown> = {}) => query<T>(document, variables, 0, true);
 
-  /** REST calls to api.github.com (used for history files). Writes (PUT) only from contents.ts. */
-  async function rest<T>(method: "GET" | "PUT", path: string, body?: unknown): Promise<T> {
+  /**
+   * REST calls to api.github.com. Writes are narrow: PUT for history files (contents.ts),
+   * and POST or PATCH for milestones (apply.ts), which GraphQL cannot make.
+   */
+  async function rest<T>(method: "GET" | "PUT" | "POST" | "PATCH", path: string, body?: unknown): Promise<T> {
     let res: Response;
     try {
       res = await fetchImpl(`https://api.github.com${path}`, {

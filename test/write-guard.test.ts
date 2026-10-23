@@ -33,6 +33,20 @@ describe("write guard", () => {
     expect(Object.keys(ALL_MUTATIONS)).toHaveLength(17);
   });
 
+  it("milestones are written only by the apply engine, and nothing else is written over REST there", () => {
+    // GraphQL cannot make a milestone, so releases are written over REST: POST and PATCH,
+    // from apply.ts only, and only to a repository's milestones.
+    const writers = src.filter(f => /\.rest(?:<[^>]*>)?\(\s*(?:"POST"|"PATCH"|method\b)/.test(f.text)).map(f => f.p.split("src/").pop());
+    expect(writers).toEqual(["github/apply.ts"]);
+    const apply = src.find(f => f.p.endsWith("src/github/apply.ts"))!.text;
+    const restCalls = [...apply.matchAll(/client\.rest(?:<[^>]*>)?\(([^,]+),\s*([^,)]+)/g)];
+    expect(restCalls).toHaveLength(2);
+    expect(restCalls.every(m => m[2]!.includes("milestonesPath") || m[2]!.trim() === "path")).toBe(true);
+    const sends = [...apply.matchAll(/send\("(\w+)",\s*([^,]+),/g)];
+    expect(sends.length).toBeGreaterThan(0);
+    expect(sends.every(m => ["POST", "PATCH"].includes(m[1]!) && m[2]!.startsWith("milestonesPath("))).toBe(true);
+  });
+
   it("files are written only by contents.ts, and only the history store uses it", () => {
     const putters = src.filter(f => /rest(<[^>]*>)?\(\s*"PUT"/.test(f.text)).map(f => f.p.split("src/").pop());
     expect(putters).toEqual(["github/contents.ts"]);

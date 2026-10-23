@@ -1,0 +1,69 @@
+/* Releases: the train of releases on one line of time, then the board of epics. */
+.rel-view { display: grid; gap: 14px; }
+
+.rel-train { padding: 44px 28px 34px; overflow-x: auto; }
+.rel-track { position: relative; height: 12px; min-width: 560px; border-radius: 999px; background: var(--surface-2); }
+.rel-span { position: absolute; top: 0; bottom: 0; border-radius: 999px; overflow: hidden; background: color-mix(in srgb, var(--accent) 16%, var(--surface-2)); border-right: 2px solid var(--surface); }
+.rel-span > span { display: block; height: 100%; background: var(--accent); }
+.rel-span.warn { background: color-mix(in srgb, var(--warn) 18%, var(--surface-2)); }
+.rel-span.warn > span { background: var(--warn); }
+.rel-span.bad { background: color-mix(in srgb, var(--bad) 18%, var(--surface-2)); }
+.rel-span.bad > span { background: var(--bad); }
+/* Where a release's last epic runs past its date: the slip, drawn past the stop. */
+.rel-slip { position: absolute; top: 3px; bottom: 3px; background: repeating-linear-gradient(135deg, var(--bad) 0 3px, transparent 3px 7px); opacity: .55; border-radius: 0 999px 999px 0; }
+.rel-stop { position: absolute; top: 50%; transform: translate(-50%, -50%); width: 14px; height: 14px; border-radius: 50%; background: var(--surface); border: 3px solid var(--accent); }
+.rel-stop.warn { border-color: var(--warn); }
+.rel-stop.bad { border-color: var(--bad); }
+.rel-stop > b, .rel-stop > span { position: absolute; left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 12px; }
+.rel-stop > b { bottom: 16px; font-weight: 600; }
+.rel-stop > span { top: 16px; color: var(--muted); font-size: 11px; }
+.rel-today { position: absolute; top: -14px; bottom: -14px; width: 2px; margin-left: -1px; background: var(--today); }
+.rel-today > span { position: absolute; top: -18px; left: 50%; transform: translateX(-50%); font-size: 11px; font-weight: 600; color: var(--today); }
+
+.rel-attn { display: grid; gap: 8px; align-content: start; }
+.rel-attn h2 { font-size: 15px; }
+.rel-attn ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.rel-problem { display: grid; gap: 6px; font-size: 13px; padding-left: 10px; border-left: 3px solid var(--line); }
+.rel-problem.order { border-left-color: var(--bad); }
+.rel-problem.late { border-left-color: var(--warn); }
+.rel-problem.split { border-left-color: var(--lane-2); }
+
+.rel-board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(270px, 1fr); gap: 12px; overflow-x: auto; padding-bottom: 6px; align-items: start; }
+.rel-col { display: grid; grid-template-rows: auto 1fr; min-height: 200px; transition: border-color .12s ease, box-shadow .12s ease; }
+.rel-col.none { background: color-mix(in srgb, var(--surface-2) 60%, var(--surface)); }
+.rel-col.over { border-color: var(--accent); box-shadow: var(--ring); }
+.rel-head { padding: 12px 14px; display: grid; gap: 6px; border-bottom: 1px solid var(--line); }
+.rel-title { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.rel-title h3 { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rel-due { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; align-items: center; flex-wrap: wrap; }
+.rel-due input { border-color: var(--line); background: var(--surface); }
+.rel-progress { display: flex; gap: 8px; align-items: center; font-size: 12px; }
+.rel-progress .progress { flex: 1; }
+.rel-cards { padding: 10px; display: grid; gap: 8px; align-content: start; }
+.rel-empty { font-size: 13px; padding: 14px 4px; text-align: center; }
+
+.rel-epic { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); cursor: grab; }
+.rel-epic[draggable="false"] { cursor: default; }
+.rel-epic:active { cursor: grabbing; }
+.rel-epic.risk { border-left: 3px solid var(--warn); }
+.rel-epic.closed { opacity: .65; }
+.rel-epic-title { border: 0; background: none; padding: 0; font: inherit; font-weight: 600; text-align: left; color: var(--fg); cursor: pointer; }
+.rel-epic-title:hover { text-decoration: underline; }
+.rel-epic-meta { display: flex; gap: 8px; align-items: center; font-size: 12px; }
+.rel-epic-meta .progress { flex: 1; height: 4px; min-width: 40px; }
+.rel-flag { font-size: 12px; }
+.rel-flag.warn { color: var(--warn); }
+.rel-flag.bad { color: var(--bad); }
+.rel-flag.muted { color: var(--muted); }
+.rel-stories { list-style: none; margin: 2px 0 0; padding: 6px 0 0; border-top: 1px solid var(--line-soft); display: grid; gap: 3px; font-size: 12px; }
+.rel-stories li { display: flex; gap: 6px; align-items: center; justify-content: space-between; }
+.rel-stories .linkbtn { color: var(--fg); text-decoration: none; text-align: left; padding: 0; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rel-stories .linkbtn:hover { text-decoration: underline; color: var(--accent); }
+.rel-move { justify-self: start; }
+
+.rel-new { display: grid; gap: 10px; max-width: 640px; }
+.rel-new h2 { font-size: 15px; }
+.rel-new-row { display: grid; grid-template-columns: minmax(0, 1fr) 180px; gap: 10px; }
+.rel-new .input { font-family: var(--f-body); }
+.rel-repos { border: 0; padding: 0; margin: 0; display: grid; gap: 4px; }
+@media (max-width: 520px) { .rel-new-row { grid-template-columns: 1fr; } }

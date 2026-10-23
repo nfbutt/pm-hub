@@ -146,7 +146,16 @@ query ItemComments($ids: [ID!]!) {
   }
 }`;
 
-export const ALL_DOCUMENTS = [VIEWER_PROJECTS, PROJECT_META, PROJECT_ITEMS, ITEMS_BY_ID, REPO_META, ITEM_COMMENTS];
+/** A repository's open releases, including the ones nothing is in yet. */
+export const REPO_MILESTONES = `
+query RepoMilestones($owner: String!, $name: String!) {
+  repository(owner: $owner, name: $name) {
+    milestones(first: 100, states: OPEN, orderBy: { field: DUE_DATE, direction: ASC }) { nodes { id title number dueOn state } }
+  }
+  rateLimit { remaining limit resetAt cost }
+}`;
+
+export const ALL_DOCUMENTS = [VIEWER_PROJECTS, PROJECT_META, PROJECT_ITEMS, ITEMS_BY_ID, REPO_META, ITEM_COMMENTS, REPO_MILESTONES];
 // VIEWER_LOGIN is declared below and added at the end of the file.
 
 /** Who is signed in, for attributing history records. */

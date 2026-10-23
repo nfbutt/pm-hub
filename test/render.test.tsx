@@ -20,6 +20,7 @@ import { CommandMenu } from "../src/ui/CommandMenu";
 import { buildSchedule } from "../src/model/schedule";
 import { Dependencies, layoutGraph } from "../src/views/Dependencies";
 import { EpicMap } from "../src/views/EpicMap";
+import { EpicLinks } from "../src/views/EpicLinks";
 import { MeetingMode } from "../src/views/epicmap/MeetingMode";
 import { Roadmap } from "../src/views/Roadmap";
 import { Review } from "../src/views/Review";
@@ -142,9 +143,33 @@ describe("views render with the demo project", () => {
     expect(html).not.toContain("Discard changes");
   });
 
-  it("Releases", () => {
-    const html = renderToString(<Releases project={project} mapping={mapping} draft={emptyDraft()} />);
+  it("Releases, editable and read-only", () => {
+    const editor: Editor = { base: project, record: noop, discard: noop, titleOf: k => k };
+    const html = renderToString(<Releases project={project} mapping={mapping} draft={emptyDraft()} editor={editor} />);
     expect(html).toContain("Release 2");
+    expect(html).toContain("New release");
+    expect(html).toContain("Needs attention");
+    expect(html).toContain("Move to…");
+    expect(html).toContain("Billing and invoices");
+    expect(html).toContain('aria-label="Release 3 due date"');
+    const ro = renderToString(<Releases project={project} mapping={mapping} draft={emptyDraft()} />);
+    expect(ro).toContain("Release 2");
+    expect(ro).not.toContain("New release");
+    expect(ro).not.toContain("Move to…");
+    expect(ro).not.toContain('type="date"');
+  });
+
+  it("Epic links, editable and read-only", () => {
+    const editor: Editor = { base: project, record: noop, discard: noop, titleOf: k => k };
+    const html = renderToString(<EpicLinks project={project} mapping={mapping} draft={emptyDraft()} editor={editor} />);
+    expect(html).toContain("Epic links");
+    expect(html).toContain("Suggested links");
+    expect(html).toContain("Overlaps");
+    expect(html).toContain("el-handle");
+    expect(html).toContain("Overage charges depend on the usage-based pricing engine.");
+    const ro = renderToString(<EpicLinks project={project} mapping={mapping} draft={emptyDraft()} />);
+    expect(ro).not.toContain("el-handle");
+    expect(ro).toContain("can’t be changed");
   });
 
   it("Progress", () => {
