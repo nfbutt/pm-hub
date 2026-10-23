@@ -52,6 +52,14 @@ const STRAYS: [number, number, string][] = [
   [5, 2, "Retry delivery from the sync queue on reconnect and keep a local cache of records while offline."],
 ];
 
+// What some epics say they need, in plain words, so the Epic links view has dependencies
+// to find in the text: [epic index, sentence].
+const NEEDS: [number, string][] = [
+  [1, "Overage charges depend on the usage-based pricing engine."],
+  [5, "Needs webhook delivery retries from the public REST API before launch."],
+  [6, "Starts once mobile notifications are live, since sync alerts reuse push delivery."],
+];
+
 const STORY_VERBS = ["Design", "Build", "Wire up", "Test", "Document", "Migrate", "Instrument", "Harden"];
 const STORY_NOUNS = ["data model", "API endpoints", "settings page", "email templates", "background job", "permissions", "error states", "metrics", "admin view", "import path"];
 
@@ -127,7 +135,7 @@ export function makeFixture(anchor: string): Fixture {
         { __typename: "ProjectV2ItemFieldSingleSelectValue", name: e.prio[0]!.toUpperCase() + e.prio.slice(1), optionId: "p", ...field("Priority") },
       ] },
       content: {
-        __typename: "Issue", id: issueId(epicNum), number: epicNum, title: e.title, body: `${e.title}: ${TOPICS[ei]!.join(", ")}.`, url: `https://github.com/${REPO}/issues/${epicNum}`,
+        __typename: "Issue", id: issueId(epicNum), number: epicNum, title: e.title, body: `${e.title}: ${TOPICS[ei]!.join(", ")}.${NEEDS.filter(n => n[0] === ei).map(n => ` ${n[1]}`).join("")}`, url: `https://github.com/${REPO}/issues/${epicNum}`,
         state: e.done === 1 ? "CLOSED" : "OPEN", stateReason: e.done === 1 ? "COMPLETED" : null,
         createdAt: ts(day(anchor, e.start - 21)), closedAt: e.done === 1 ? ts(day(anchor, e.start + e.len - 2)) : null, updatedAt: ts(day(anchor, -2)),
         repository: repoRef(REPO),

@@ -8,6 +8,9 @@ import { emptyDraft, type Draft } from "./schedule";
 
 export interface DateRange { start: string | null; end: string | null }
 export interface StateValue { state: "open" | "closed"; reason: string | null }
+/** A release as GitHub keeps it: a milestone, in one repository. */
+export interface MilestoneSpec { title: string; dueOn: string | null; state: "open" | "closed" }
+
 export interface NewItem { title: string; body?: string; repo: string | null; parentKey: string | null; labels: string[]; fields: Record<string, FieldValue> }
 
 export type Op =
@@ -25,6 +28,12 @@ export type Op =
   | { kind: "create"; key: string; item: NewItem }
   | { kind: "archive"; key: string; itemId?: string }
   | { kind: "unarchive"; key: string; itemId?: string }
+  /**
+   * A release itself. `before` null makes it, `after` null closes it (GitHub keeps it,
+   * closed, the way an issue is closed rather than deleted). It has no item key: `ref`
+   * names it by repository and the title it had when the change began.
+   */
+  | { kind: "milestone"; ref: string; repo: string; before: MilestoneSpec | null; after: MilestoneSpec | null }
   // Local only: never written to GitHub.
   | { kind: "park"; key: string; before: boolean; after: boolean }
   | { kind: "reorder"; lane: string; before: string[]; after: string[] };
@@ -73,7 +82,7 @@ function adjustSubIssues(parent: Item | undefined, child: Item, delta: 1 | -1) {
 }
 
 export function applyOps(base: Project, ops: Op[]): Applied {
-  const project: Project = { ...base, items: base.items.map(i => ({ ...i, fields: { ...i.fields }, labels: [...i.labels], assignees: [...i.assignees], blockedBy: [...i.blockedBy] })) };
+  const project: Project = { ...base, milestones: base.milestones ? [...base.milestones] : undefined, items: base.items.map(i => ({ ...i, fields: { ...i.fields }, labels: [...i.labels], assignees: [...i.assignees], blockedBy: [...i.blockedBy] })) };
   const byKey = new Map(project.items.map(i => [i.key, i]));
   const local = emptyDraft();
   const unsavableDates = new Set<string>();
@@ -81,6 +90,7 @@ export function applyOps(base: Project, ops: Op[]): Applied {
 
   for (const op of ops) {
     if (op.kind === "reorder") { local.order[op.lane] = [...op.after]; continue; }
+    if (op.kind === "milestone") { applyMilestone(project, op); continue; }
     if (op.kind === "park") { if (op.after) parked.add(op.key); else parked.delete(op.key); continue; }
     if (op.kind === "create") {
       const parent = op.item.parentKey ? byKey.get(op.item.parentKey) : undefined;
@@ -140,6 +150,26 @@ export function applyOps(base: Project, ops: Op[]): Applied {
   return { project, local, unsavableDates };
 }
 
+/** Makes, re-dates, renames or closes a release, and keeps every item that is in it in step. */
+function applyMilestone(project: Project, op: Extract<Op, { kind: "milestone" }>) {
+  const list = [...(project.milestones ?? [])];
+  const at = op.before ? list.findIndex(m => m.repo === op.repo && m.title === op.before!.title) : -1;
+  if (!op.after) {
+    if (at >= 0) list.splice(at, 1);
+  } else {
+    const next: Milestone = at >= 0
+      ? { ...list[at]!, title: op.after.title, dueOn: op.after.dueOn }
+      : { id: null, title: op.after.title, number: 0, dueOn: op.after.dueOn, state: "OPEN", repo: op.repo };
+    if (at >= 0) list[at] = next; else list.push(next);
+  }
+  project.milestones = list;
+  if (!op.before) return;
+  for (const i of project.items) {
+    if (i.milestone?.repo !== op.repo || i.milestone.title !== op.before.title) continue;
+    i.milestone = op.after ? { ...i.milestone, title: op.after.title, dueOn: op.after.dueOn } : i.milestone;
+  }
+}
+
 // ---------------------------------------------------------------- inverses
 
 /** The op that undoes `op` on GitHub. Used to revert an apply. */
@@ -185,6 +215,7 @@ export function slotOf(op: Op): string {
     case "addBlockedBy": case "removeBlockedBy": return `blocked:${op.key}:${op.blocker}`;
     case "archive": case "unarchive": return `archive:${op.key}`;
     case "create": return `create:${op.key}`;
+    case "milestone": return `milestone:${op.ref}`;
     default: return `${op.kind}:${op.key}`;
   }
 }
@@ -270,6 +301,13 @@ export function describe(op: Op, titleOf: (key: string) => string): string {
     case "unarchive": return `${t}: restored to the project`;
     case "park": return `${t}: ${op.after ? "parked" : "back on the chart"}`;
     case "reorder": return `Reordered ${op.lane}`;
+    case "milestone": {
+      const due = (s: MilestoneSpec | null) => (s?.dueOn ? fmtDate(s.dueOn.slice(0, 10)) : "no date");
+      if (!op.before && op.after) return `New release “${op.after.title}” in ${op.repo}, due ${due(op.after)}`;
+      if (op.before && !op.after) return `Closed the release “${op.before.title}” in ${op.repo}`;
+      if (op.before && op.after && op.before.title !== op.after.title) return `Renamed the release “${op.before.title}” → “${op.after.title}” in ${op.repo}`;
+      return `Release “${op.after?.title}” in ${op.repo}: due ${due(op.before)} → ${due(op.after)}`;
+    }
   }
 }
 

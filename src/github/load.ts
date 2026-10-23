@@ -1,8 +1,8 @@
 import type { GitHubClient } from "./client";
 import { GitHubError } from "./client";
-import { ITEM_COMMENTS, PROJECT_ITEMS, PROJECT_META, VIEWER_PROJECTS } from "./queries";
+import { ITEM_COMMENTS, PROJECT_ITEMS, PROJECT_META, REPO_MILESTONES, VIEWER_PROJECTS } from "./queries";
 import type { ProjectItemsData, ProjectMetaData, RawItem, ViewerProjectsData } from "./types";
-import { normalizeProject, summarizeProjects, type Item, type Project, type ProjectSummary } from "../model/normalize";
+import { normalizeProject, summarizeProjects, type Item, type Milestone, type Project, type ProjectSummary } from "../model/normalize";
 
 export interface Viewer { login: string; name: string | null; avatarUrl: string }
 
@@ -34,7 +34,30 @@ export async function loadProject(
     if (!conn.pageInfo.hasNextPage) break;
     after = conn.pageInfo.endCursor;
   }
-  return normalizeProject(owner, project, items, new Date().toISOString());
+  const out = normalizeProject(owner, project, items, new Date().toISOString());
+  out.milestones = await loadMilestones(client, out);
+  return out;
+}
+
+/** How many repositories' releases are read. A project spread wider than this is rare. */
+const MAX_REPOS = 12;
+
+/**
+ * The open milestones of every repository the project's issues live in. A failure here is
+ * not a failure to load: the releases the issues are in are still known from the issues.
+ */
+async function loadMilestones(client: GitHubClient, project: Project): Promise<Milestone[]> {
+  const repos = [...new Set(project.items.map(i => i.repo).filter((r): r is string => !!r))].slice(0, MAX_REPOS);
+  const out: Milestone[] = [];
+  for (const repo of repos) {
+    const [owner, name] = repo.split("/");
+    try {
+      const data = await client.query<{ repository: { milestones: { nodes: { id: string; title: string; number: number; dueOn: string | null; state: string }[] } } | null }>(
+        REPO_MILESTONES, { owner, name });
+      for (const m of data.repository?.milestones.nodes ?? []) out.push({ ...m, repo });
+    } catch { /* the issues still say which releases they are in */ }
+  }
+  return out;
 }
 
 /** What someone said on an issue. */

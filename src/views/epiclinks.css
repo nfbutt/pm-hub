@@ -1,0 +1,66 @@
+/* Epic links: cards laid out by what waits for what, lines between them, a panel beside. */
+.elinks { display: grid; gap: 12px; }
+.elinks-body { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
+@media (max-width: 1100px) { .elinks-body { grid-template-columns: minmax(0, 1fr); } }
+
+.elinks-board { overflow: auto; max-height: calc(100vh - 210px); min-height: 320px; position: relative; touch-action: none;
+  background-image: radial-gradient(circle, var(--line) 1px, transparent 1.2px); background-size: 22px 22px; }
+.elinks-canvas { position: relative; }
+.elinks-lines { position: absolute; inset: 0; overflow: visible; }
+
+.el-card { position: absolute; display: grid; grid-template-rows: auto auto auto; align-content: center; gap: 5px; padding: 9px 22px 9px 12px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow-sm); cursor: pointer; text-align: left; }
+.el-card:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.el-card.sel { border-color: var(--accent); box-shadow: var(--ring); }
+.el-card.loop { background: color-mix(in srgb, var(--bad) 7%, var(--surface)); }
+.el-card.target { border-color: var(--today); box-shadow: 0 0 0 3px color-mix(in srgb, var(--today) 30%, transparent); }
+.el-title { font-weight: 600; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.el-meta { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); }
+.el-meta > span:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.el-card .progress { height: 4px; min-width: 0; }
+/* The handle a link is drawn from: the right edge, where the arrow leaves. */
+.el-handle { position: absolute; right: -8px; top: 50%; width: 16px; height: 16px; margin-top: -8px; border-radius: 50%; padding: 0;
+  border: 2px solid var(--accent); background: var(--surface); cursor: crosshair; touch-action: none; }
+.el-handle:hover, .el-handle:focus-visible { background: var(--accent); }
+
+.el-edge, .el-overlap { cursor: pointer; }
+.el-edge .hit, .el-overlap .hit { stroke: transparent; stroke-width: 14; fill: none; }
+.el-edge .vis { fill: none; stroke: var(--accent); stroke-width: 2; }
+.el-edge.stories .vis { stroke: var(--muted); stroke-dasharray: 5 4; stroke-width: 1.6; }
+.el-edge.critical .vis { stroke: var(--bad); stroke-width: 2.4; }
+.el-edge.hint .vis { stroke: var(--today); stroke-dasharray: 2 5; stroke-width: 2; stroke-linecap: round; }
+.el-edge.sel .vis { stroke-width: 3.4; }
+.el-edge:hover .vis { stroke-width: 3; }
+.el-head { fill: var(--accent); }
+.el-head.critical { fill: var(--bad); }
+.el-head.hint { fill: var(--today); }
+.el-overlap .vis { stroke: color-mix(in srgb, var(--lane-1) 55%, transparent); stroke-dasharray: 1 6; stroke-linecap: round; }
+.el-overlap.sel .vis, .el-overlap:hover .vis { stroke: var(--lane-1); }
+/* The percentage is shown for the line you are looking at, so labels never pile up on arrows. */
+.el-olabel { opacity: 0; transition: opacity .12s ease; pointer-events: none; }
+.el-overlap:hover .el-olabel, .el-overlap.sel .el-olabel { opacity: 1; }
+.el-olabel { font-size: 11px; fill: var(--lane-1); text-anchor: middle; font-family: var(--f-mono); paint-order: stroke; stroke: var(--surface); stroke-width: 4px; }
+.el-drag { stroke: var(--today); stroke-width: 2; stroke-dasharray: 4 4; fill: none; }
+
+.elinks-panel { display: grid; gap: 12px; position: sticky; top: calc(var(--topbar-h, 53px) + 12px); max-height: calc(100vh - var(--topbar-h, 53px) - 24px); overflow: auto; }
+.el-section { display: grid; gap: 8px; }
+.el-section h2 { font-size: 15px; }
+.el-section h3 { font-size: 12px; font-weight: 600; color: var(--muted); margin-top: 4px; }
+.el-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; font-size: 13px; }
+.el-list li { display: grid; gap: 3px; }
+.el-list q { font-size: 12px; font-style: italic; }
+.el-list .pill { justify-self: start; }
+.el-row { display: flex !important; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.el-bar { height: 5px; border-radius: 999px; background: var(--surface-2); overflow: hidden; display: block; }
+.el-bar > span { display: block; height: 100%; background: var(--lane-1); }
+.el-quote { margin: 0; padding: 8px 12px; border-left: 3px solid var(--today); background: var(--surface-2); border-radius: 0 8px 8px 0; font-size: 13px; }
+.el-ai { display: grid; gap: 6px; padding-top: 8px; border-top: 1px solid var(--line-soft); }
+.el-key { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 13px; }
+.el-key li { display: flex; gap: 10px; align-items: center; }
+.el-key .sw { width: 28px; height: 0; border-top: 2px solid var(--accent); }
+.el-key .sw.stories { border-top: 2px dashed var(--muted); }
+.el-key .sw.critical { border-top-color: var(--bad); }
+.el-key .sw.hint { border-top: 2px dotted var(--today); }
+.el-key .sw.overlap { border-top: 3px dotted var(--lane-1); }
+.elinks .linkish { font: inherit; color: inherit; cursor: pointer; white-space: normal; max-width: none; overflow: visible; }
+

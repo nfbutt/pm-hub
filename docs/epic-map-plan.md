@@ -143,6 +143,24 @@ Still to do in this phase: a model filling in what the grammar cannot parse, and
 
 **Phase 18 — easy for everyone — mostly done.** Focus management in the drawer and the modal, live regions, unique ids in the picker, roles on the progress bars, a keyboard way to select a row, and the chart views saying where the same information can be read as text. Still to do: a text equivalent of the Gantt and the Epic Map for screen readers, and the Epic Map's live region, which mounts with its text already in it.
 
+**Phase 22 — epic links and releases of epics — done.** Two things a plan is really made of, given a picture each.
+
+*Epic links* (`/links`) draws every open epic as a card, in columns by how deep it is in the chain, and the lines between them: a link made between the epics themselves, a link that comes through their stories, the ones on the chain that decides the end date, and where two epics overlap. Dragging from one epic's handle onto another (or clicking the handle, then the other epic, or picking from a list) says the second cannot start until the first is done — an ordinary "blocked by" on the epic that waits, so the Roadmap, the Gantt and the plan check see it too. A link that would close a loop is refused, with the reason.
+
+Links are suggested two ways. Without any model, `textHints` (`src/model/epiclinks.ts`) reads each epic and its stories for a sentence that says it depends on, needs, or comes after another epic — by its title, the words of its title no other epic has, or an issue number — and offers it with that sentence as the reason. With a model, the epic-level prompt (`src/ai/epics.ts`) gives it every epic, what it is about and its stories, and every link it proposes has to quote words found in either epic or one of their stories (`checkEpicLinks`). The panel says how many were left out and why.
+
+*Releases* (`/releases`) is now a plan of epics, not a list of stories. A release holds epics; moving an epic moves its open stories with it — the ones in its old release or in none, never one someone put somewhere else on purpose. The train along the top shows every release on one line of time: how far along it is, and where its last epic runs past its date. Each release can be made and re-dated from here. What stops a release making its date is listed with a one-click fix: an epic that ships before something it waits for, an epic that finishes after its release is due, stories split from their epic. A model can propose where the unplaced epics go, and `checkPlacements` keeps only proposals that put nothing before what it waits for, nothing after what waits for it, and nothing into a release due before the epic finishes.
+
+What was built:
+- `src/model/releases.ts`: the releases (milestones, a field's options, or iterations), the board, the problems and their fixes, and the changes: `moveEpicToRelease`, `createRelease`, `setReleaseDue`, `checkPlacements`.
+- `src/model/epiclinks.ts`: the graph, the layout, `textHints`, `checkEpicLinks`, and the link and unlink changes.
+- A new op, `milestone`: a release itself, by repository and title. `before` null makes it, `after` null closes it (the way an issue is closed rather than deleted). It folds like any other op — a release made and re-dated in the same draft is one creation — and its inverse closes what was made, so a rollback works.
+- GitHub's GraphQL API cannot make or change a milestone, so `apply.ts` makes, re-dates and closes milestones over REST, first in an apply, so work put into a new release in the same apply finds it. Making a release that is already there uses it. The write guard allows those calls from `apply.ts` and nowhere else.
+- The loader reads each repository's open milestones, so a release with nothing in it yet is still a release.
+- Questions to a model are asked when the person asks, behind a button, because a model on this computer can take minutes; the answer from before is shown straight away.
+
+**Not doing.** Making a release when releases are a field's options or iterations: the API that adds an option replaces all of them, and an iteration's dates belong to the project's settings. The page says so. Renaming a release from the board.
+
 ### Later, when there is something to write back
 
 - **Link types and lag.** Finish-to-start, start-to-start, finish-to-finish, start-to-finish, and a signed lag. GitHub only has "blocked by", so there is nowhere to write these yet; the plan model would need the field before the interface can.
